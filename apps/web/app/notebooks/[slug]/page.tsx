@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
 
 const TABS = ["CODE", "PLAIN ENGLISH", "LINE BY LINE", "WHY THIS EXISTS", "WHAT SHOULD HAPPEN", "HOW TO VERIFY", "COMMON FAILURE", "TRY MODIFYING"];
 
-export default function NotebookDetail({ params }: { params: { slug: string } }) {
+export default function NotebookDetail({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
   const [nb, setNb] = useState<any>(null);
   const [tab, setTab] = useState("CODE");
   const [open, setOpen] = useState<number | null>(0);
   useEffect(() => {
-    api(`/api/notebooks/${params.slug}`).then(setNb);
-  }, [params.slug]);
+    api(`/api/notebooks/${slug}`).then(setNb);
+  }, [slug]);
   if (!nb) return <p>Loading notebook…</p>;
   return (
     <div className="space-y-5">

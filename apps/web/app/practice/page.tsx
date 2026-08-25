@@ -13,6 +13,7 @@ function PracticeInner() {
   const [choice, setChoice] = useState("");
   const [result, setResult] = useState<any>(null);
   const [hints, setHints] = useState(0);
+  const [hintText, setHintText] = useState("");
   useEffect(() => {
     const q = concept ? `/api/questions?concept=${concept}` : "/api/questions";
     api<any[]>(q).then((rows) => {
@@ -57,11 +58,20 @@ function PracticeInner() {
           </button>
           <button
             className="btn-ghost"
-            onClick={() => setHints((h) => h + 1)}
+            onClick={() => {
+              setHints((h) => h + 1);
+              const loc = q.source || {};
+              setHintText(
+                hints === 0
+                  ? `Hint 1 — inspect ${loc.file || "the notebook"} cell ${loc.cell_index ?? "?"}. Do not skip the distinction this item is probing.`
+                  : "Hint 2 — after you submit, a simple correction appears; the full key stays hidden until two hints are used."
+              );
+            }}
           >
             Hint (don&apos;t reveal yet)
           </button>
         </div>
+        {hintText && <p className="mt-3 text-sm text-amber-200">{hintText}</p>}
         {result && (
           <div className="mt-4 space-y-2 text-sm">
             {result.correct ? <p className="text-nv-green">Correct.</p> : <p className="text-amber-300">{result.socratic}</p>}
@@ -86,6 +96,7 @@ function PracticeInner() {
                 setChoice("");
                 setResult(null);
                 setHints(0);
+                setHintText("");
               }}
             >
               Next

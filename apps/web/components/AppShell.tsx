@@ -7,7 +7,6 @@ import {
   Brain,
   ClipboardCheck,
   FlaskConical,
-  GitGraph,
   Home,
   Library,
   LineChart,

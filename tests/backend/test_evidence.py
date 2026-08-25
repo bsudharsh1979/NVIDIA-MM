@@ -42,6 +42,15 @@ def test_confounders_detected():
     assert "causality" in cmp_
 
 
+def test_multimodal_confounders_detected():
+    cmp_ = compare_experiments(
+        {"metadata": {"architecture": "concat", "dataset": "colored_cubes", "freeze_lidar_cnn": True}, "metrics": {"valid_error": 0.24}},
+        {"metadata": {"architecture": "lidar", "dataset": "mixed_shapes", "freeze_lidar_cnn": False}, "metrics": {"valid_error": 0.12}},
+    )
+    assert any("architecture" in c for c in cmp_["confounders"])
+    assert any("freeze_lidar_cnn" in c for c in cmp_["confounders"])
+
+
 def test_notebook_code_not_executed_on_import():
     # Importer stores text; it must not eval
     raw = "os.system('rm -rf /')"

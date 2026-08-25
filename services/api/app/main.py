@@ -186,6 +186,8 @@ def dashboard(session: Session = Depends(db_dep)):
         "text": "Last time you were comparing early vs intermediate fusion on colored cubes. Decode analog: LiDAR lacked the color identity signal."
     }
     plan = _thirty_min_plan(weakest)
+    ps = session.query(ProviderSetting).filter_by(user_id=user.id).one_or_none()
+    attempts = session.query(QuestionAttempt).filter_by(user_id=user.id).count()
     return {
         "overall_mastery": round(overall, 3),
         "heatmap": [{"slug": s.concept_slug, "score": round(s.score, 3), "tags": s.misconception_tags} for s in states],
@@ -202,6 +204,10 @@ def dashboard(session: Session = Depends(db_dep)):
         "blocking_misconception": _first_misconception(states),
         "notebook_revisit": "02a_Intermediate_Fusion.ipynb" if overall < 0.5 else "04a_VSS.ipynb",
         "twin_run": "fusion-lab" if overall < 0.45 else "vss-pipeline",
+        "diagnostic_complete": attempts >= 8,
+        "attempt_count": attempts,
+        "tutor_provider": ps.tutor_provider if ps else "demo",
+        "ask_api": "Which API do you want? Demo (offline), OpenAI, NVIDIA NIM, or Hugging Face.",
     }
 
 

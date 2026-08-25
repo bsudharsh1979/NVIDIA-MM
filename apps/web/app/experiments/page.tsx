@@ -7,7 +7,7 @@ import { EvidenceBadge } from "@/components/EvidenceBadge";
 export default function ExperimentsPage() {
   const [kind, setKind] = useState("json");
   const [name, setName] = useState("aiperf-run");
-  const [raw, setRaw] = useState('{"ttft_ms": 210, "tokens_per_sec": 62, "gpu_count": 1}');
+  const [raw, setRaw] = useState('{"cilp_valid_loss": 3.12, "finetuned_accuracy": 0.96, "freeze_lidar_cnn": true, "split": "val"}');
   const [rows, setRows] = useState<any[]>([]);
   const [imported, setImported] = useState<any>(null);
   const [cmp, setCmp] = useState<any>(null);
@@ -56,8 +56,8 @@ export default function ExperimentsPage() {
               await api("/api/experiments/compare", {
                 method: "POST",
                 body: JSON.stringify({
-                  a: { metadata: { gpu_count: 1, concurrency: 8, cold: true }, metrics: { tokens_per_sec: 40 } },
-                  b: { metadata: { gpu_count: 8, concurrency: 32, cold: false }, metrics: { tokens_per_sec: 200 } },
+                  a: { metadata: { architecture: "concat", dataset: "colored_cubes", freeze_lidar_cnn: true, split: "val" }, metrics: { valid_error: 0.24 } },
+                  b: { metadata: { architecture: "lidar", dataset: "mixed_shapes", freeze_lidar_cnn: false, split: "train" }, metrics: { valid_error: 0.12 } },
                 }),
               })
             )

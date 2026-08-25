@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { ApiPicker } from "@/components/ApiPicker";
 
 type Dash = {
   overall_mastery: number;
@@ -19,6 +20,9 @@ type Dash = {
   blocking_misconception: string | null;
   notebook_revisit: string;
   twin_run: string;
+  diagnostic_complete?: boolean;
+  tutor_provider?: string;
+  ask_api?: string;
 };
 
 export default function HomePage() {
@@ -48,6 +52,20 @@ export default function HomePage() {
           simulations. Demo mode needs no API key.
         </p>
       </header>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <ApiPicker />
+        <div className="card space-y-3">
+          <h2 className="font-semibold">{data.diagnostic_complete ? "Diagnostic on file" : "First-run diagnostic"}</h2>
+          <p className="text-sm text-[var(--muted)]">
+            {data.diagnostic_complete
+              ? "Heatmap below already includes your attempts. Re-run if you want a fresh snapshot."
+              : "Before lessons, probe fusion, KV-analog (CILP), VSS, and Graph-RAG so the 30-minute plan is honest."}
+          </p>
+          <Link className="btn" href="/diagnostic">
+            {data.diagnostic_complete ? "Retake diagnostic" : "Start diagnostic"}
+          </Link>
+        </div>
+      </section>
       <section className="grid gap-4 md:grid-cols-4">
         <Stat label="Overall mastery" value={`${Math.round(data.overall_mastery * 100)}%`} />
         <Stat label="Reviews due" value={String(data.reviews_due)} href="/review" />

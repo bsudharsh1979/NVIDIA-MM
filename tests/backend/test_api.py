@@ -12,8 +12,9 @@ os.environ["COURSE_MATERIALS_DIR"] = str(ROOT / "course-materials")
 sys.path.insert(0, str(ROOT / "services" / "api"))
 sys.path.insert(0, str(ROOT / "services" / "twin-engine"))
 
-from app.main import app  # noqa: E402
+from app.main import app, ensure_ready  # noqa: E402
 
+ensure_ready()
 client = TestClient(app)
 
 
@@ -29,6 +30,15 @@ def test_providers_ask_which_api():
     body = r.json()
     assert "demo" in str(body).lower()
     assert "ask" in body
+
+
+def test_dashboard_asks_which_api():
+    r = client.get("/api/dashboard")
+    assert r.status_code == 200
+    body = r.json()
+    assert "API" in body["ask_api"]
+    assert "diagnostic_complete" in body
+    assert body["tutor_provider"] in {"demo", "openai", "nim", "huggingface"}
 
 
 def test_twin_requires_simulation_label():

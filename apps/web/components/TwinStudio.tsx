@@ -216,16 +216,111 @@ function TwinVisual({ slug, controls, state }: { slug: string; controls: any; st
       </svg>
     );
   }
-  if (slug === "contrastive-space" && state?.scene?.similarity) {
-    const m = state.scene.similarity as number[][];
+  if (slug === "contrastive-space") {
+    const m = (state?.scene?.similarity as number[][]) || [];
+    if (!m.length) {
+      return <p className="text-sm text-[var(--muted)]">Predict diagonal vs off-diagonal similarity, then run to fill the CLIP-style matrix.</p>;
+    }
     return (
-      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${m.length}, 1fr)` }}>
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${m.length}, 1fr)` }} aria-label="Similarity matrix">
         {m.flatMap((row, i) =>
           row.map((v, j) => (
             <div key={`${i}-${j}`} className="aspect-square rounded-sm" style={{ background: `rgba(118,185,0,${v})` }} title={`${i},${j}=${v.toFixed(2)}`} />
           ))
         )}
       </div>
+    );
+  }
+  if (slug === "modality-explorer") {
+    const mod = controls.modality || "audio";
+    return (
+      <svg viewBox="0 0 420 220" className="h-56 w-full" aria-label="Modality explorer">
+        <rect width="420" height="220" fill="#0b0f14" />
+        <text x="12" y="22" fill="#76b900" fontSize="12">
+          {mod}
+        </text>
+        {mod === "audio"
+          ? Array.from({ length: 24 }).map((_, i) => <rect key={i} x={16 + i * 16} y={180 - ((i * 13) % 90)} width="10" height={(i * 13) % 90} fill="#7dd3fc" opacity="0.8" />)
+          : null}
+        {mod === "ct" ? Array.from({ length: 8 }).map((_, i) => <rect key={i} x={40 + i * 44} y="50" width="36" height="120" fill="#1e3a2f" stroke="#76b900" opacity={0.4 + i * 0.07} />) : null}
+        {mod === "rgb" ? <rect x="80" y="50" width="240" height="130" fill="#1e2a3a" stroke="#76b900" /> : null}
+        {mod === "lidar" ? <circle cx="210" cy="120" r="70" fill="none" stroke="#7dd3fc" strokeDasharray="4 4" /> : null}
+        <text x="12" y="208" fill="#9bb0c5" fontSize="11">
+          nyquist {state?.metrics?.nyquist_hz ?? "?"} · axis {controls.ct_axis}
+        </text>
+      </svg>
+    );
+  }
+  if (slug === "projection-lab") {
+    return (
+      <svg viewBox="0 0 420 180" className="h-48 w-full" aria-label="Projection">
+        <rect width="420" height="180" fill="#0b0f14" />
+        <rect x="20" y="60" width="90" height="50" rx="6" fill="#1e3a2f" stroke="#76b900" />
+        <text x="32" y="90" fill="#e8eef5" fontSize="11">
+          {controls.in_dim || 200}-d
+        </text>
+        <rect x="160" y="60" width="90" height="50" rx="6" fill="#241e38" stroke="#c084fc" />
+        <text x="178" y="90" fill="#e8eef5" fontSize="11">
+          MLP
+        </text>
+        <rect x="300" y="60" width="100" height="50" rx="6" fill="#2a2410" stroke="#fbbf24" />
+        <text x="312" y="90" fill="#e8eef5" fontSize="11">
+          frozen {controls.out_dim || 512}
+        </text>
+        <line x1="110" y1="85" x2="160" y2="85" stroke="#76b900" />
+        <line x1="250" y1="85" x2="300" y2="85" stroke="#fbbf24" />
+        <text x="20" y="160" fill="#9bb0c5" fontSize="11">
+          cosine {state?.metrics?.embedding_cosine?.toFixed?.(2) ?? "?"} · freeze={String(controls.freeze_source)}
+        </text>
+      </svg>
+    );
+  }
+  if (slug === "ocr-pipeline") {
+    const stages = ["PDF", "partition", "chunk", "tables", "YOLOX", "RAG"];
+    return (
+      <svg viewBox="0 0 420 140" className="h-40 w-full" aria-label="OCR pipeline">
+        <rect width="420" height="140" fill="#0b0f14" />
+        {stages.map((s, i) => (
+          <g key={s}>
+            <rect x={12 + i * 68} y="40" width="60" height="40" rx="6" fill="#1e3a2f" stroke="#76b900" />
+            <text x={18 + i * 68} y="64" fill="#e8eef5" fontSize="10">
+              {s}
+            </text>
+          </g>
+        ))}
+        <text x="12" y="110" fill="#9bb0c5" fontSize="11">
+          elements {state?.metrics?.elements ?? "?"} · tables {state?.metrics?.tables ?? "?"}
+        </text>
+      </svg>
+    );
+  }
+  if (slug === "cilp-assessment") {
+    return (
+      <svg viewBox="0 0 420 200" className="h-52 w-full" aria-label="CILP assessment">
+        <rect width="420" height="200" fill="#0b0f14" />
+        <rect x="20" y="30" width="110" height="40" rx="6" fill="#1e3a2f" stroke="#76b900" />
+        <text x="36" y="54" fill="#e8eef5" fontSize="11">
+          RGB embed
+        </text>
+        <rect x="20" y="100" width="110" height="40" rx="6" fill="#1e2a3a" stroke="#7dd3fc" />
+        <text x="30" y="124" fill="#e8eef5" fontSize="11">
+          LiDAR embed
+        </text>
+        <rect x="170" y="65" width="100" height="50" rx="6" fill="#241e38" stroke="#c084fc" />
+        <text x="186" y="95" fill="#e8eef5" fontSize="11">
+          cosine CE
+        </text>
+        <rect x="300" y="65" width="100" height="50" rx="6" fill="#2a2410" stroke="#fbbf24" />
+        <text x="312" y="95" fill="#e8eef5" fontSize="11">
+          projector
+        </text>
+        <line x1="130" y1="50" x2="170" y2="80" stroke="#76b900" />
+        <line x1="130" y1="120" x2="170" y2="100" stroke="#7dd3fc" />
+        <line x1="270" y1="90" x2="300" y2="90" stroke="#fbbf24" />
+        <text x="12" y="180" fill="#9bb0c5" fontSize="11">
+          loss {state?.metrics?.cilp_valid_loss?.toFixed?.(2) ?? "?"} · acc {state?.metrics?.finetuned_accuracy?.toFixed?.(2) ?? "?"}
+        </text>
+      </svg>
     );
   }
   return (

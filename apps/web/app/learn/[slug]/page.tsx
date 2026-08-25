@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { NotesPanel } from "@/components/NotesPanel";
 
-export default function LessonPage({ params }: { params: { slug: string } }) {
-  const slug = params.slug;
+export default function LessonPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
   const [concept, setConcept] = useState<any>(null);
   const [lesson, setLesson] = useState<any>(null);
   const [step, setStep] = useState(0);
@@ -62,16 +63,18 @@ export default function LessonPage({ params }: { params: { slug: string } }) {
               Quiz this concept
             </Link>
           )}
+          {current.kind === "EXPLAIN_BACK" && <NotesPanel targetType="concept" targetId={slug} />}
           <div className="mt-4 flex justify-between">
             <button className="btn-ghost" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>
               Back
             </button>
-            <button className="btn" disabled={current.kind === "PREDICT" && !pred && locked} onClick={() => { setLocked(false); setStep((s) => Math.min(steps.length - 1, s + 1)); }}>
+            <button className="btn" disabled={current.kind === "PREDICT" && !pred.trim()} onClick={() => { setLocked(false); setStep((s) => Math.min(steps.length - 1, s + 1)); }}>
               Next
             </button>
           </div>
         </div>
       )}
+      <NotesPanel targetType="concept" targetId={slug} />
     </div>
   );
 }

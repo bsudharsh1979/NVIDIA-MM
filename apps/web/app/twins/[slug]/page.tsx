@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, use } from "react";
 import { TwinStudio } from "@/components/TwinStudio";
 
 function Inner({ slug }: { slug: string }) {
@@ -9,10 +9,11 @@ function Inner({ slug }: { slug: string }) {
   return <TwinStudio slug={slug} initialPrediction={sp.get("prediction") || ""} />;
 }
 
-export default function TwinPage({ params }: { params: { slug: string } }) {
+export default function TwinPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
   return (
     <Suspense fallback={<p>Loading twin…</p>}>
-      <Inner slug={params.slug} />
+      <Inner slug={slug} />
     </Suspense>
   );
 }

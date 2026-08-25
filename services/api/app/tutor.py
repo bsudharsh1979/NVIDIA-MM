@@ -83,7 +83,7 @@ def tutor_turn(
         )
         _bump(session, user_id, concepts, "teachback", result["quality"] >= 0.6, result["quality"])
         session.commit()
-        return {**result, "session_id": tutor_session_id, "intent": intent, "citations": retrieved}
+        return {**result, "session_id": tutor_session_id, "intent": intent, "citations": retrieved, "evidence_type": "TUTOR_INTERPRETATION", "text": result["feedback"], "telemetry": {"provider": "demo", "model": "teachback-grader"}}
 
     research_block = None
     if mode == "research" and PerplexityResearchProvider().available():
@@ -178,6 +178,7 @@ def tutor_turn(
         "research": research_block,
         "depth": depth,
         "mode": mode,
+        "evidence_type": result.evidence_type,
     }
 
 

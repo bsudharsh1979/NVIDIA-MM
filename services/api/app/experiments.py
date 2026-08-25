@@ -68,7 +68,24 @@ def compare_experiments(a: dict, b: dict) -> dict:
     meta_a = a.get("metadata") or {}
     meta_b = b.get("metadata") or {}
     confounders = []
-    for field in ("gpu_type", "gpu_count", "model", "precision", "isl", "osl", "concurrency", "engine", "warmup", "cache_state"):
+    for field in (
+        "gpu_type",
+        "gpu_count",
+        "model",
+        "precision",
+        "isl",
+        "osl",
+        "concurrency",
+        "engine",
+        "warmup",
+        "cache_state",
+        "architecture",
+        "dataset",
+        "split",
+        "freeze_lidar_cnn",
+        "freeze_cilp",
+        "chunk_duration_s",
+    ):
         if meta_a.get(field) != meta_b.get(field) and (field in meta_a or field in meta_b):
             confounders.append(f"{field} differs: {meta_a.get(field)} vs {meta_b.get(field)}")
     if meta_a.get("cold") != meta_b.get("cold"):
@@ -106,7 +123,10 @@ def explain_experiment(payload: dict) -> dict:
         "likely_explanations": payload.get("hypotheses")
         or ["Hypotheses only — do not treat correlation as causality."],
         "alternative_explanations": payload.get("confounders") or ["Uncontrolled workload, hardware, or warmup differences."],
-        "what_to_check_next": ["Match GPU count, precision, ISL/OSL, concurrency, and warm vs cold."],
-        "course_connection": "For fusion labs compare architectures on the same Omniverse split; for VSS compare chunk_duration on the same video.",
+        "what_to_check_next": [
+            "Match architecture, dataset/split, freeze flags, chunk_duration, and hardware before claiming a winner.",
+            "Do not mix SIMULATED_RESULT twin curves with ACTUAL_RUN imports.",
+        ],
+        "course_connection": "For fusion labs compare architectures on the same Omniverse split; for VSS compare chunk_duration on the same video; for CILP compare projector training with lidar_cnn frozen.",
         "evidence_type": payload.get("evidence_type") or "ACTUAL_RUN",
     }
