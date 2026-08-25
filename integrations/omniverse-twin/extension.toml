@@ -1,0 +1,9 @@
+# Drop an Omniverse Kit application here.
+# This repo clone did not include one. See docs/omniverse-repo-analysis.md.
+
+[package]
+name = "modality.twin.bridge"
+version = "0.1.0"
+
+[[python.extension]]
+name = "modality.twin.bridge"
