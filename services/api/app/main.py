@@ -60,9 +60,20 @@ app.add_middleware(
 )
 
 _LAST_TWIN: TwinState | None = None
+_READY = False
+
+
+def ensure_ready() -> None:
+    global _READY
+    if _READY:
+        return
+    init_db()
+    seed()
+    _READY = True
 
 
 def db_dep():
+    ensure_ready()
     session = get_session()
     try:
         yield session
@@ -77,8 +88,7 @@ def learner(session: Session) -> User:
 
 @app.on_event("startup")
 def _startup():
-    init_db()
-    seed()
+    ensure_ready()
 
 
 class ChatIn(BaseModel):
