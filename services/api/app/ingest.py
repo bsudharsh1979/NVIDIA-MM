@@ -312,10 +312,14 @@ def hybrid_search(session: Session, query: str, k: int = 8, filters: dict | None
             continue
         emb = span.embedding or [0.0] * 64
         cosine = sum(a * b for a, b in zip(qvec, emb))
-        lex = lexical_score(query, f"{span.title} {span.text} {span.code}")
-        score = 0.55 * cosine + 0.45 * min(lex, 1.5)
-        if score <= 0:
+        lex = lexical_score(query, f"{span.title} {span.heading or ''} {span.text} {span.code} {span.locator}")
+        if lex <= 0 and cosine < 0.2:
             continue
+        score = 0.3 * cosine + 0.7 * min(lex, 2.0)
+        blob = f"{span.title} {span.text} {span.code}".lower()
+        for phrase in ("late fusion", "early fusion", "intermediate fusion", "colored cubes", "cilp", "chunk_duration", "graph-rag", "xyza"):
+            if phrase in query.lower() and phrase.replace("-", " ") in blob.replace("-", " "):
+                score += 0.5
         scored.append((score, span))
     scored.sort(key=lambda x: x[0], reverse=True)
     out = []

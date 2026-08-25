@@ -83,3 +83,11 @@ def test_nav_endpoints_exist():
         "/api/misconceptions",
     ]:
         assert client.get(path).status_code == 200, path
+
+
+def test_fusion_search_ranks_fusion_notebooks():
+    r = client.get("/api/search", params={"q": "late fusion vs intermediate concat colored cubes"})
+    assert r.status_code == 200
+    blob = str(r.json()).lower()
+    assert "02a" in blob or "01a" in blob
+    assert blob.find("02a") < blob.find("00_jupyter") or "00_jupyter" not in blob[:800]
