@@ -20,6 +20,7 @@ function TutorInner() {
   const [teachConcept, setTeachConcept] = useState("late-fusion");
   const [teachResult, setTeachResult] = useState<any>(null);
   const [listening, setListening] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   const speaking = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
@@ -66,6 +67,7 @@ function TutorInner() {
 
   async function send(text: string) {
     setBusy(true);
+    setErr(null);
     setMsgs((m) => [...m, { role: "user", text }]);
     try {
       const r = await api<any>("/api/tutor", {
@@ -77,6 +79,9 @@ function TutorInner() {
         ...m,
         { role: "assistant", text: r.text, citations: r.citations, telemetry: r.telemetry, evidence: r.evidence_type || r.telemetry?.evidence_type },
       ]);
+    } catch (e) {
+      setErr(String(e));
+      setMsgs((m) => [...m, { role: "assistant", text: `Tutor request failed: ${e}` }]);
     } finally {
       setBusy(false);
       setInput("");
@@ -109,6 +114,7 @@ function TutorInner() {
           </select>
         </div>
         <div className="mt-4 space-y-3">
+          {err && <p className="mt-2 text-sm text-amber-300">{err}</p>}
           {msgs.map((m, i) => (
             <article key={i} className="card text-sm whitespace-pre-wrap">
               <div className="text-xs uppercase text-[var(--muted)]">{m.role}</div>

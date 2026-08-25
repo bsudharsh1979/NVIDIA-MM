@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 from .db import MasteryState, ReviewItem, utcnow
 
@@ -75,8 +75,32 @@ def _ema(prev: float, value: float, alpha: float = 0.35) -> float:
 def fsrs_update(state: MasteryState, rating: int) -> None:
     """Explainable FSRS-inspired update (stability/difficulty + next_review)."""
     now = utcnow()
-    last = state.last_reviewed or now
+    last = _as_utc(state.last_reviewed) or now
     elapsed = max((now - last).total_seconds() / 86400.0, 0.01)
+    d = state.difficulty
+    s = max(state.stability, 0.1)
+    # Difficulty: harder after lapses
+    d = d + (rating - 3) * (-0.35)
+    d = min(10.0, max(1.0, d))
+    if rating == 1:
+        s = max(0.3, s * 0.4)
+    else:
+        s = s * (1.3 + (4 - d) * 0.08) * (elapsed**0.1)
+        s = min(s, 60.0)
+    interval = s * (0.9 + 0.15 * rating)
+    state.difficulty = d
+    state.stability = s
+    state.last_reviewed = now
+    state.next_review = now + timedelta(days=max(0.04, interval))
+
+
+def _as_utc(dt):
+    """SQLite round-trips DateTime as naive; FSRS math needs aware UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
     d = state.difficulty
     s = max(state.stability, 0.1)
     # Difficulty: harder after lapses

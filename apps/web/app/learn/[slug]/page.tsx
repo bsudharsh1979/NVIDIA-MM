@@ -13,11 +13,15 @@ export default function LessonPage({ params }: { params: Promise<{ slug: string 
   const [step, setStep] = useState(0);
   const [depth, setDepth] = useState<"school" | "engineer" | "research">("engineer");
   const [pred, setPred] = useState("");
-  const [locked, setLocked] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    api(`/api/concepts/${slug}`).then(setConcept);
+    setErr(null);
+    api(`/api/concepts/${slug}`)
+      .then(setConcept)
+      .catch((e) => setErr(String(e)));
     api(`/api/lessons/${slug}`).then(setLesson).catch(() => {});
   }, [slug]);
+  if (err) return <p className="text-amber-300">Could not load this lesson. {err}</p>;
   if (!concept) return <p>Loading lesson…</p>;
   const steps = lesson?.steps || [];
   const current = steps[step];
@@ -68,7 +72,7 @@ export default function LessonPage({ params }: { params: Promise<{ slug: string 
             <button className="btn-ghost" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>
               Back
             </button>
-            <button className="btn" disabled={current.kind === "PREDICT" && !pred.trim()} onClick={() => { setLocked(false); setStep((s) => Math.min(steps.length - 1, s + 1)); }}>
+            <button className="btn" disabled={current.kind === "PREDICT" && !pred.trim()} onClick={() => setStep((s) => Math.min(steps.length - 1, s + 1))}>
               Next
             </button>
           </div>

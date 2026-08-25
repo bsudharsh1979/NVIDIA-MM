@@ -25,11 +25,15 @@ function PracticeInner() {
   const q = items[idx];
   async function submit() {
     if (!q) return;
-    const r = await api<any>(`/api/questions/${q.id}/attempt`, {
-      method: "POST",
-      body: JSON.stringify({ response: choice, hints, latency_ms: 800 }),
-    });
-    setResult(r);
+    try {
+      const r = await api<any>(`/api/questions/${q.id}/attempt`, {
+        method: "POST",
+        body: JSON.stringify({ response: choice, hints, latency_ms: 800 }),
+      });
+      setResult(r);
+    } catch (e) {
+      setResult({ correct: false, socratic: String(e), why_wrong: { your_answer: choice, what_this_suggests: "The grader failed.", missing_distinction: "Try again.", source_evidence: q.source, simple_correction: "Retry this item." } });
+    }
   }
   if (!q) return <p>No questions yet.</p>;
   return (

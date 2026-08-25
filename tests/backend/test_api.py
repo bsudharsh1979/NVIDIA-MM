@@ -41,6 +41,22 @@ def test_dashboard_asks_which_api():
     assert body["tutor_provider"] in {"demo", "openai", "nim", "huggingface"}
 
 
+def test_second_touch_of_concept_survives_sqlite_datetimes():
+    first = client.get("/api/concepts/late-fusion")
+    assert first.status_code == 200
+    second = client.get("/api/concepts/late-fusion")
+    assert second.status_code == 200
+    tutor = client.post(
+        "/api/tutor",
+        json={"message": "Explain late fusion vs intermediate concat on the colored cubes task.", "mode": "course", "provider": "demo"},
+    )
+    assert tutor.status_code == 200
+    assert tutor.json()["text"]
+    q = client.get("/api/diagnostic").json()["items"][0]
+    attempt = client.post(f"/api/questions/{q['id']}/attempt", json={"response": "nope", "hints": 0})
+    assert attempt.status_code == 200
+
+
 def test_twin_requires_simulation_label():
     r = client.post("/api/twins/fusion-lab/run", json={"controls": {"architecture": "lidar", "dataset": "colored_cubes"}, "prediction": "LiDAR will overfit"})
     assert r.status_code == 200
