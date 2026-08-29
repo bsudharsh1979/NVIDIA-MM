@@ -1,0 +1,37 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: sqlite:////app/data/academy.db
+      COURSE_MATERIALS_DIR: /app/course-materials
+      DEMO_MODE: "true"
+    volumes:
+      - academy-data:/app/data
+  web:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.web
+    ports:
+      - "3000:3000"
+    environment:
+      API_PROXY_URL: http://api:8000
+    depends_on:
+      - api
+  omniverse-bridge:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.bridge
+    ports:
+      - "8010:8010"
+    environment:
+      ACADEMY_API: http://api:8000
+    depends_on:
+      - api
+    profiles: ["omniverse"]
+
+volumes:
+  academy-data:
