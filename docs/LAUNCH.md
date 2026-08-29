@@ -20,7 +20,9 @@ pytest tests/backend -q
 cd apps/web && npx next lint && npm run build
 ```
 
-## Modal (profile already authenticated)
+## Modal
+
+This Cloud Agent workspace did **not** have a Modal token (`modal` CLI: "Token missing"). Run the commands below on a machine where `modal profile` is already logged in.
 
 Keep `MODAL_MIN_CONTAINERS=0` if you want cold-start savings on the $30/month plan. Use `1` only when you need an always-warm container for a live demo.
 
