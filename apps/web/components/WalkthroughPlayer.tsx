@@ -52,6 +52,7 @@ export function WalkthroughPlayer({
   const cache = useRef<Map<string, Walkthrough>>(new Map());
   const instant = useRef<number[]>([]);
   const playGen = useRef(0);
+  const audioEl = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(DEPTH_KEY);
@@ -98,15 +99,31 @@ export function WalkthroughPlayer({
 
   const stopSpeech = () => {
     if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+    if (audioEl.current) {
+      audioEl.current.pause();
+      audioEl.current.src = "";
+      audioEl.current = null;
+    }
   };
 
   const speak = async (text: string) => {
     const t0 = performance.now();
     try {
-      await api("/api/voice/tts", {
+      const payload = await api<any>("/api/voice/tts", {
         method: "POST",
         body: JSON.stringify({ text, provider: "auto", clip: false }),
       });
+      const b64 = payload.audio?.audio_base64;
+      if (b64) {
+        return await new Promise<number>((resolve) => {
+          const audio = new Audio(`data:${payload.audio.content_type || "audio/mpeg"};base64,${b64}`);
+          audio.playbackRate = Math.min(1.5, Math.max(0.75, speed));
+          audioEl.current = audio;
+          audio.onended = () => resolve(performance.now() - t0);
+          audio.onerror = () => resolve(performance.now() - t0);
+          audio.play().catch(() => resolve(performance.now() - t0));
+        });
+      }
     } catch {
       /* browser fallback below */
     }

@@ -146,22 +146,29 @@ class NvidiaNIMProvider(TutorModelProvider):
     name = "nim"
 
     def available(self) -> bool:
-        return bool(settings.nim_base_url and settings.nvidia_api_key)
+        return bool(settings.nvidia_api_key)
 
     def complete(self, messages: list[dict], **kwargs: Any) -> ProviderResult:
         if not self.available():
-            return ProviderResult(text="", provider="nim", model=settings.nvidia_nim_model, error="NIM_BASE_URL / NVIDIA_API_KEY not configured")
+            return ProviderResult(text="", provider="nim", model=settings.nvidia_nim_model, error="NVIDIA_API_KEY not configured")
         t0 = time.perf_counter()
-        url = settings.nim_base_url.rstrip("/") + "/chat/completions"
+        base = (settings.nim_base_url or "https://integrate.api.nvidia.com/v1").rstrip("/")
+        url = base + "/chat/completions"
         headers = {"Authorization": f"Bearer {settings.nvidia_api_key}", "Accept": "application/json"}
-        body = {"model": settings.nvidia_nim_model, "messages": messages, "temperature": 0.2}
-        with httpx.Client(timeout=90) as client:
+        body = {
+            "model": settings.nvidia_nim_model,
+            "messages": messages,
+            "temperature": kwargs.get("temperature", 0.2),
+            "max_tokens": kwargs.get("max_tokens", 1024),
+        }
+        with httpx.Client(timeout=120) as client:
             r = client.post(url, headers=headers, json=body)
         latency = (time.perf_counter() - t0) * 1000
         if r.status_code >= 400:
             return ProviderResult(text="", provider="nim", model=settings.nvidia_nim_model, latency_ms=latency, error=r.text[:500])
         data = r.json()
-        text = data["choices"][0]["message"]["content"]
+        message = (data.get("choices") or [{}])[0].get("message") or {}
+        text = message.get("content") or message.get("reasoning_content") or ""
         usage = data.get("usage") or {}
         return ProviderResult(
             text=text,

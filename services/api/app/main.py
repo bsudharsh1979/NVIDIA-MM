@@ -967,7 +967,7 @@ def setup_checklist(session: Session = Depends(db_dep)):
         {"id": "concepts", "label": "Concept graph seeded", "ok": n_c >= 80, "count": n_c},
         {"id": "questions", "label": "Question bank", "ok": n_q >= 400, "count": n_q},
         {"id": "openai", "label": "OpenAI tutor", "ok": bool(settings.openai_api_key), "required": False},
-        {"id": "nim", "label": "NVIDIA NIM tutor", "ok": bool(settings.nvidia_api_key or settings.nim_base_url), "required": False},
+        {"id": "nim", "label": "NVIDIA NIM tutor", "ok": bool(settings.nvidia_api_key), "required": False},
         {"id": "huggingface", "label": "Hugging Face tutor", "ok": bool(settings.hf_token), "required": False},
         {"id": "elevenlabs", "label": "ElevenLabs TTS", "ok": bool(settings.elevenlabs_api_key), "required": False},
         {"id": "sarvam", "label": "Sarvam Indic TTS", "ok": bool(settings.sarvam_api_key), "required": False},

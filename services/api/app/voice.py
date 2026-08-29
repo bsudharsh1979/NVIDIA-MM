@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 import httpx
@@ -58,7 +59,7 @@ def _elevenlabs(text: str) -> dict[str, Any]:
     voice = settings.elevenlabs_voice_id or "21m00Tcm4TlvDq8ikWAM"
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}"
     try:
-        with httpx.Client(timeout=45) as client:
+        with httpx.Client(timeout=90) as client:
             r = client.post(
                 url,
                 headers={"xi-api-key": settings.elevenlabs_api_key, "Accept": "audio/mpeg"},
@@ -70,7 +71,13 @@ def _elevenlabs(text: str) -> dict[str, Any]:
             )
         if r.status_code >= 400:
             return {"error": r.text[:300], "chars": len(text)}
-        return {"status": "ok", "bytes": len(r.content), "content_type": "audio/mpeg", "chars": len(text)}
+        return {
+            "status": "ok",
+            "bytes": len(r.content),
+            "content_type": "audio/mpeg",
+            "chars": len(text),
+            "audio_base64": base64.b64encode(r.content).decode("ascii"),
+        }
     except Exception as exc:
         return {"error": str(exc)[:300], "chars": len(text)}
 

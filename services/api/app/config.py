@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str = "https://api.openai.com/v1"
 
-    nim_base_url: str = ""
+    nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_api_key: str = ""
-    nvidia_nim_model: str = "meta/llama-3.1-70b-instruct"
+    nvidia_nim_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
     hf_token: str = ""
     hf_model: str = "meta-llama/Llama-3.1-8B-Instruct"
