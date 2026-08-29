@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 EvidenceType = Literal[
     "COURSE_SOURCE",
@@ -46,6 +46,12 @@ class TwinState(BaseModel):
     scene: dict[str, Any] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _forbid_actual_run(self) -> "TwinState":
+        if self.evidence_type == "ACTUAL_RUN":
+            raise ValueError("twin engine cannot emit ACTUAL_RUN")
+        return self
 
     def sanitized(self) -> "TwinState":
         unit = {
@@ -91,6 +97,8 @@ SCENARIOS = [
     "vss-pipeline",
     "graph-rag",
     "cilp-assessment",
+    "incident-diagnosis",
+    "risk-radar",
 ]
 
 
@@ -106,6 +114,8 @@ def run_scenario(scenario: str, controls: dict[str, Any] | None = None) -> TwinS
         "vss-pipeline": simulate_vss,
         "graph-rag": simulate_graph_rag,
         "cilp-assessment": simulate_cilp,
+        "incident-diagnosis": simulate_incident,
+        "risk-radar": simulate_risk_radar,
     }
     if scenario not in runners:
         raise ValueError(f"Unknown scenario: {scenario}")
@@ -504,3 +514,140 @@ def simulate_cilp(controls: dict[str, Any]) -> TwinState:
         ],
         warnings=[] if freeze_lidar else ["lidar_cnn unfrozen — course says this risks failing the assessment."],
     )
+
+
+INCIDENT_CAUSES = ("missing-graph", "long-chunks", "lidar-overfit", "unfrozen-head", "naive-chunks")
+
+
+def simulate_incident(controls: dict[str, Any]) -> TwinState:
+    """Symptoms first. Ground truth withheld until the learner commits a cause."""
+    truth = str(controls.get("ground_truth") or "missing-graph")
+    if truth not in INCIDENT_CAUSES:
+        truth = "missing-graph"
+    committed = bool(controls.get("commit"))
+    guess = str(controls.get("hypothesis") or "")
+    symptoms = {
+        "missing-graph": {"ppe_answer": 0.15, "caption_hit": 0.8, "graph_edges": 0.0},
+        "long-chunks": {"ppe_answer": 0.4, "caption_hit": 0.35, "graph_edges": 0.6},
+        "lidar-overfit": {"ppe_answer": 0.5, "caption_hit": 0.5, "valid_error": 0.7},
+        "unfrozen-head": {"ppe_answer": 0.45, "finetuned_accuracy": 0.62},
+        "naive-chunks": {"ppe_answer": 0.4, "table_integrity": 0.2},
+    }[truth]
+    notes = ["Symptoms only until you commit a diagnosis. This twin never emits ACTUAL_RUN."]
+    if committed:
+        notes.append(f"Ground truth: {truth}. Your hypothesis: {guess or 'none'}.")
+        notes.append("Correct" if guess == truth else "Mismatch — inspect the withheld leading signal.")
+    else:
+        notes.append("Ground truth withheld. Commit before the reveal.")
+    metrics = {k: float(v) for k, v in symptoms.items()}
+    metrics["committed"] = 1.0 if committed else 0.0
+    metrics["correct"] = 1.0 if committed and guess == truth else 0.0
+    scene = {"symptoms": symptoms, "options": list(INCIDENT_CAUSES)}
+    if committed:
+        scene["ground_truth"] = truth
+    return TwinState(
+        scenario="incident-diagnosis",
+        controls={k: v for k, v in controls.items() if k != "ground_truth" or committed},
+        metrics=metrics,
+        scene=scene,
+        notes=notes,
+        warnings=[] if committed else ["Diagnosis hidden until commit."],
+    )
+
+
+def simulate_risk_radar(controls: dict[str, Any]) -> TwinState:
+    rgb_q = clamp(float(controls.get("rgb_quality", 0.7)), 0, 1)
+    lidar_q = clamp(float(controls.get("lidar_quality", 0.85)), 0, 1)
+    chunk = clamp(float(controls.get("chunk_duration_s", 20)), 1, 120)
+    enable_chat = bool(controls.get("enable_chat", True))
+    freeze = bool(controls.get("freeze_lidar_cnn", True))
+    pdf_instr = bool(controls.get("pdf_as_instructions", False))
+    scores = {
+        "identity_risk": clamp(0.85 - rgb_q + (0.25 if lidar_q > 0.9 else 0), 0, 1),
+        "recall_risk": clamp(chunk / 80.0, 0, 1),
+        "relation_risk": 0.0 if enable_chat else 0.9,
+        "assessment_risk": 0.15 if freeze else 0.8,
+        "prompt_injection_risk": 0.95 if pdf_instr else 0.1,
+    }
+    top = max(scores, key=scores.get)
+    return TwinState(
+        scenario="risk-radar",
+        controls=controls,
+        metrics={**scores, "top_risk": float(list(scores.keys()).index(top))},
+        scene={"top": top, "scores": scores},
+        notes=[
+            f"Highest simulated operational risk: {top}.",
+            "Scores are educational priors, not production telemetry.",
+        ],
+        warnings=["SIMULATED_RESULT — not a live SOC feed."],
+    )
+
+
+SUGGESTED_SCENARIOS: dict[str, list[dict[str, Any]]] = {
+    "lidar-geometry": [
+        {"name": "origin-beam", "controls": {"depth": 25, "azimuth_deg": 0, "zenith_deg": 0, "invert_angles": True}},
+        {"name": "no-invert", "controls": {"depth": 25, "azimuth_deg": 30, "zenith_deg": 10, "invert_angles": False}},
+        {"name": "max-range", "controls": {"depth": 50, "max_range": 50}},
+        {"name": "steep-zenith", "controls": {"depth": 10, "zenith_deg": 40, "invert_angles": True}},
+    ],
+    "fusion-lab": [
+        {"name": "lidar-overfit-cubes", "controls": {"dataset": "colored_cubes", "architecture": "lidar"}},
+        {"name": "need-intermediate", "controls": {"dataset": "colored_cubes", "architecture": "concat"}},
+        {"name": "matmul", "controls": {"dataset": "colored_cubes", "architecture": "matmul"}},
+        {"name": "shapes-lidar", "controls": {"dataset": "mixed_shapes", "architecture": "lidar"}},
+    ],
+    "modality-explorer": [
+        {"name": "audio", "controls": {"modality": "audio", "sample_rate": 44100}},
+        {"name": "low-sr", "controls": {"modality": "audio", "sample_rate": 8000}},
+        {"name": "ct", "controls": {"modality": "ct", "ct_axis": 2}},
+        {"name": "lidar", "controls": {"modality": "lidar"}},
+    ],
+    "contrastive-space": [
+        {"name": "aligned", "controls": {"alignment": 0.9, "batch_size": 6}},
+        {"name": "collapsed", "controls": {"alignment": 0.1, "batch_size": 6}},
+        {"name": "hot", "controls": {"temperature": 0.4, "alignment": 0.7}},
+        {"name": "batch8", "controls": {"batch_size": 8, "alignment": 0.8}},
+    ],
+    "projection-lab": [
+        {"name": "frozen", "controls": {"freeze_source": True, "trained_fraction": 0.8}},
+        {"name": "unfreeze-source", "controls": {"freeze_source": False, "trained_fraction": 0.8}},
+        {"name": "wide", "controls": {"in_dim": 200, "out_dim": 512}},
+        {"name": "untrained", "controls": {"trained_fraction": 0.05}},
+    ],
+    "ocr-pipeline": [
+        {"name": "by-title", "controls": {"chunking": "by_title", "infer_tables": True, "yolox": True}},
+        {"name": "naive-chunk", "controls": {"chunking": "naive"}},
+        {"name": "no-tables", "controls": {"infer_tables": False}},
+        {"name": "no-yolox", "controls": {"yolox": False}},
+    ],
+    "vss-pipeline": [
+        {"name": "default", "controls": {"chunk_duration_s": 20, "video_length_s": 120}},
+        {"name": "long-chunks", "controls": {"chunk_duration_s": 60, "video_length_s": 120}},
+        {"name": "short-chunks", "controls": {"chunk_duration_s": 5, "video_length_s": 120}},
+        {"name": "vague-prompt", "controls": {"prompt_specificity": 0.1, "temperature": 0.9}},
+    ],
+    "graph-rag": [
+        {"name": "ppe", "controls": {"mode": "graph", "enable_chat": True}},
+        {"name": "no-graph", "controls": {"mode": "graph", "enable_chat": False}},
+        {"name": "live-vector", "controls": {"mode": "vector", "enable_chat": True}},
+        {"name": "forklift", "controls": {"query": "Is there a forklift near the tape?"}},
+    ],
+    "cilp-assessment": [
+        {"name": "pass-path", "controls": {"freeze_lidar_cnn": True, "freeze_cilp": True, "trained_fraction": 0.95}},
+        {"name": "unfreeze-hurt", "controls": {"freeze_lidar_cnn": False, "trained_fraction": 0.95}},
+        {"name": "undertrained", "controls": {"trained_fraction": 0.2}},
+        {"name": "wide-emb", "controls": {"cilp_emb": 256}},
+    ],
+    "incident-diagnosis": [
+        {"name": "ppe-miss", "controls": {"ground_truth": "missing-graph", "commit": False}},
+        {"name": "commit-wrong", "controls": {"ground_truth": "missing-graph", "hypothesis": "long-chunks", "commit": True}},
+        {"name": "commit-right", "controls": {"ground_truth": "missing-graph", "hypothesis": "missing-graph", "commit": True}},
+        {"name": "lidar-case", "controls": {"ground_truth": "lidar-overfit", "commit": False}},
+    ],
+    "risk-radar": [
+        {"name": "prompt-inject", "controls": {"pdf_as_instructions": True}},
+        {"name": "evidence-mix", "controls": {"chunk_duration_s": 10}},
+        {"name": "gpu-hold", "controls": {"enable_chat": True}},
+        {"name": "no-chat", "controls": {"enable_chat": False}},
+    ],
+}

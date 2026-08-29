@@ -55,6 +55,7 @@ class SourceArtifact(Base):
     title: Mapped[str] = mapped_column(String(255), default="")
     checksum: Mapped[str] = mapped_column(String(64), default="")
     extra: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    uid: Mapped[str] = mapped_column(String(40), default="", index=True)
 
 
 class SourceSpan(Base):
@@ -69,6 +70,7 @@ class SourceSpan(Base):
     stored_output: Mapped[str] = mapped_column(Text, default="")
     heading: Mapped[str] = mapped_column(String(255), default="")
     embedding: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    uid: Mapped[str] = mapped_column(String(40), default="", index=True)
 
     __table_args__ = (Index("ix_span_artifact", "artifact_id"),)
 
@@ -82,6 +84,7 @@ class Notebook(Base):
     purpose: Mapped[str] = mapped_column(Text, default="")
     why_it_matters: Mapped[str] = mapped_column(Text, default="")
     expected_outcome: Mapped[str] = mapped_column(Text, default="")
+    uid: Mapped[str] = mapped_column(String(40), default="", index=True)
 
 
 class NotebookCell(Base):
@@ -110,6 +113,7 @@ class Concept(Base):
     school: Mapped[str] = mapped_column(Text)
     engineer: Mapped[str] = mapped_column(Text)
     research: Mapped[str] = mapped_column(Text)
+    analogy: Mapped[str] = mapped_column(Text, default="")
     twin_id: Mapped[str] = mapped_column(String(80), default="")
     source: Mapped[dict] = mapped_column(JSON, default=dict)
     common_misconceptions: Mapped[list] = mapped_column(JSON, default=list)
@@ -382,6 +386,27 @@ def init_db() -> None:
         path = settings.database_url.replace("sqlite:///", "")
         Path(path).parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
+    _add_missing_columns(engine)
+
+
+def _add_missing_columns(engine) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    wanted = {
+        "source_artifacts": [("uid", "VARCHAR(40) DEFAULT ''")],
+        "source_spans": [("uid", "VARCHAR(40) DEFAULT ''")],
+        "notebooks": [("uid", "VARCHAR(40) DEFAULT ''")],
+        "concepts": [("analogy", "TEXT DEFAULT ''")],
+    }
+    with engine.begin() as conn:
+        for table, cols in wanted.items():
+            if table not in insp.get_table_names():
+                continue
+            existing = {c["name"] for c in insp.get_columns(table)}
+            for name, decl in cols:
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {decl}"))
 
 
 def get_session() -> Session:

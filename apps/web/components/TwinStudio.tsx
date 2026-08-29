@@ -5,7 +5,7 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "rec
 import { api } from "@/lib/api";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
 
-export function TwinStudio({ slug, initialPrediction = "" }: { slug: string; initialPrediction?: string }) {
+export function TwinStudio({ slug, initialPrediction = "", scenario = "" }: { slug: string; initialPrediction?: string; scenario?: string }) {
   const [meta, setMeta] = useState<any>(null);
   const [controls, setControls] = useState<Record<string, any>>({});
   const [prediction, setPrediction] = useState(initialPrediction);
@@ -19,7 +19,8 @@ export function TwinStudio({ slug, initialPrediction = "" }: { slug: string; ini
       setMeta(t);
       const next: Record<string, any> = {};
       for (const c of t?.controls || []) next[c.key] = c.default;
-      setControls(next);
+      const suggested = (t?.suggestions || []).find((s: any) => s.name === scenario);
+      setControls(suggested ? { ...next, ...suggested.controls } : next);
     });
   }, [slug]);
 
@@ -87,6 +88,23 @@ export function TwinStudio({ slug, initialPrediction = "" }: { slug: string; ini
             <span className="text-[var(--muted)]">Your prediction (required)</span>
             <textarea className="mt-1 w-full rounded-lg border border-[var(--line)] bg-transparent p-2" rows={3} value={prediction} onChange={(e) => setPrediction(e.target.value)} />
           </label>
+          {meta.suggestions?.length ? (
+            <div className="space-y-1">
+              <div className="text-xs uppercase text-[var(--muted)]">Suggested scenarios</div>
+              <div className="flex flex-wrap gap-1">
+                {meta.suggestions.map((s: any) => (
+                  <button
+                    key={s.name}
+                    type="button"
+                    className="rounded-full border border-[var(--line)] px-2 py-0.5 text-[11px]"
+                    onClick={() => setControls({ ...controls, ...s.controls })}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {err && <p className="text-sm text-amber-300">{err}</p>}
           <button className="btn" onClick={run}>
             Run simulation

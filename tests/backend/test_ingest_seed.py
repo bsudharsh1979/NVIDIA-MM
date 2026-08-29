@@ -46,7 +46,7 @@ def test_no_execution_counts_required(seeded):
 def test_questions_have_sources(seeded):
     session = get_session()
     qs = session.query(Question).all()
-    assert len(qs) >= 400
+    assert len(qs) >= 500
     for q in qs[:50]:
         assert q.source.get("file")
     session.close()

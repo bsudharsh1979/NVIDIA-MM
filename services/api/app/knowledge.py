@@ -1,5 +1,7 @@
 """Course-grounded concepts, edges, misconceptions, lessons, twin catalog."""
 
+from .knowledge_extra import EXTRA_CONCEPTS, EXTRA_MISCONCEPTIONS
+
 CONCEPTS = [
     {
         "slug": "multimodal-ai",
@@ -553,6 +555,10 @@ CONCEPTS = [
     },
 ]
 
+CONCEPTS = CONCEPTS + EXTRA_CONCEPTS
+for _c in CONCEPTS:
+    _c.setdefault("analogy", (_c.get("school") or "").split(".")[0])
+
 EDGES = [
     ("omniverse-sdg", "rgb-camera", "GENERATES", "paired RGB"),
     ("omniverse-sdg", "lidar", "GENERATES", "paired LiDAR"),
@@ -776,6 +782,8 @@ MISCONCEPTIONS = [
     },
 ]
 
+MISCONCEPTIONS = MISCONCEPTIONS + EXTRA_MISCONCEPTIONS
+
 OBJECTIVES = [
     ("obj-xyza", "Convert LiDAR depth + azimuth + zenith into XYZA", "lidar-xyza", "01a_Early_and_Late_Fusion.ipynb", 3),
     ("obj-fusion-choice", "Choose fusion depth for complementary sensors", "intermediate-concat", "02a_Intermediate_Fusion.ipynb", 5),
@@ -887,6 +895,31 @@ TWINS_CATALOG = [
             {"key": "trained_fraction", "label": "Training progress", "min": 0, "max": 1, "step": 0.05, "default": 0.85},
             {"key": "cilp_emb", "label": "CILP emb", "min": 64, "max": 512, "step": 8, "default": 200},
         ],
+        "suggestions": ["pass-path", "unfreeze-hurt", "undertrained", "wide-emb"],
+    },
+    {
+        "slug": "incident-diagnosis",
+        "title": "Incident diagnosis",
+        "summary": "See symptoms (missed PPE, high valid error). Commit a cause before the twin reveals ground truth.",
+        "controls": [
+            {"key": "hypothesis", "label": "Your diagnosis", "type": "enum", "options": ["missing-graph", "long-chunks", "lidar-overfit", "unfrozen-head", "naive-chunks"], "default": "missing-graph"},
+            {"key": "commit", "label": "Commit diagnosis", "type": "bool", "default": False},
+        ],
+        "suggestions": ["ppe-miss", "commit-wrong", "commit-right", "lidar-case"],
+    },
+    {
+        "slug": "risk-radar",
+        "title": "Operational risk radar",
+        "summary": "Educational risk scores for identity collapse, missed video events, missing graphs, unfreeze, and PDF injection.",
+        "controls": [
+            {"key": "rgb_quality", "label": "RGB quality", "min": 0, "max": 1, "step": 0.05, "default": 0.7},
+            {"key": "lidar_quality", "label": "LiDAR quality", "min": 0, "max": 1, "step": 0.05, "default": 0.85},
+            {"key": "chunk_duration_s", "label": "VSS chunk (s)", "min": 5, "max": 60, "step": 1, "default": 20},
+            {"key": "enable_chat", "label": "enable_chat", "type": "bool", "default": True},
+            {"key": "freeze_lidar_cnn", "label": "Freeze lidar_cnn", "type": "bool", "default": True},
+            {"key": "pdf_as_instructions", "label": "Treat PDF as instructions", "type": "bool", "default": False},
+        ],
+        "suggestions": ["prompt-inject", "evidence-mix", "gpu-hold", "no-chat"],
     },
 ]
 

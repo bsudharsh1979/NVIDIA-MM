@@ -14,8 +14,10 @@ import {
   MessageSquare,
   Repeat,
   Settings,
+  ShieldAlert,
   Sparkles,
   Boxes,
+  ListChecks,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -26,12 +28,14 @@ const NAV = [
   { href: "/concepts", label: "Concept Map", icon: Map },
   { href: "/notebooks", label: "Notebooks", icon: BookOpen },
   { href: "/twins", label: "Digital Twins", icon: Boxes },
+  { href: "/risks", label: "Risks", icon: ShieldAlert },
   { href: "/experiments", label: "Experiments", icon: FlaskConical },
   { href: "/practice", label: "Practice", icon: Brain },
   { href: "/review", label: "Review", icon: Repeat },
   { href: "/assessment", label: "Assessment", icon: ClipboardCheck },
   { href: "/progress", label: "Progress", icon: LineChart },
   { href: "/sources", label: "Sources", icon: Library },
+  { href: "/setup", label: "Setup", icon: ListChecks },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -49,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </a>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-[var(--line)] bg-[var(--panel)] md:flex">
         <div className="px-5 py-6">
-          <div className="text-[10px] uppercase tracking-[0.25em] text-nv-green">NVIDIA DLI</div>
+          <div className="text-[10px] uppercase tracking-[0.25em] text-nv-green">Personal-use course notes</div>
           <div className="mt-1 font-semibold leading-tight">Modality Twin Academy</div>
           <div className="mt-1 text-xs text-[var(--muted)]">Multimodal AI · fusion · VSS · CILP</div>
         </div>
@@ -71,6 +75,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+        <p className="px-4 pb-2 text-[10px] leading-snug text-[var(--muted)]">
+          Not affiliated with or endorsed by NVIDIA. Course files are bring-your-own personal-use materials.
+        </p>
         <button
           type="button"
           onClick={() => setDark((d) => !d)}

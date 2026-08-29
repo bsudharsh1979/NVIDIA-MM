@@ -5,17 +5,24 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from datetime import datetime, timezone
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "twin-engine"))
 
-from twin_engine import SCENARIOS, TwinState, run_scenario  # noqa: E402
+from twin_engine import SCENARIOS, SUGGESTED_SCENARIOS, TwinState, run_scenario  # noqa: E402
 
 from .config import settings
+from .lookup import resolve_notebook, resolve_source, resolve_span
+from .risks import RISKS
+from .voice import tts_payload, voice_status
+from .walkthrough import build_walkthrough
 from .db import (
     Bookmark,
     Concept,
@@ -38,6 +45,7 @@ from .db import (
     ReviewItem,
     SourceArtifact,
     SourceSpan,
+    TutorSession,
     TwinRun,
     User,
     get_session,
@@ -50,10 +58,13 @@ from .providers import PROVIDERS, get_tutor_provider, provider_matrix
 from .seed import seed
 from .tutor import grade_teachback, tutor_turn, why_wrong
 
+CORS_ORIGIN_REGEX = r"https://.*\.(modal\.run|modal\.app)|https://.*\.vercel\.app|http://(localhost|127\.0\.0\.1):\d+"
+
 app = FastAPI(title="Modality Twin Academy", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()] + ["*"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -241,6 +252,7 @@ def concepts(session: Session = Depends(db_dep)):
                 "school": n.school,
                 "engineer": n.engineer,
                 "research": n.research,
+                "analogy": n.analogy,
                 "twin_id": n.twin_id,
                 "source": n.source,
                 "misconceptions": n.common_misconceptions,
@@ -270,6 +282,7 @@ def concept_detail(slug: str, session: Session = Depends(db_dep)):
         "school": n.school,
         "engineer": n.engineer,
         "research": n.research,
+        "analogy": n.analogy,
         "twin_id": n.twin_id,
         "source": n.source,
         "misconceptions": n.common_misconceptions,
@@ -286,7 +299,7 @@ def notebooks(session: Session = Depends(db_dep)):
     nbs = session.query(Notebook).order_by(Notebook.order_index).all()
     return [
         {
-            "id": n.id,
+            "id": n.uid or n.slug,
             "slug": n.slug,
             "purpose": n.purpose,
             "why_it_matters": n.why_it_matters,
@@ -298,25 +311,26 @@ def notebooks(session: Session = Depends(db_dep)):
     ]
 
 
-@app.get("/api/notebooks/{slug}")
-def notebook_detail(slug: str, session: Session = Depends(db_dep)):
-    nb = session.query(Notebook).filter_by(slug=slug).one_or_none()
-    if not nb:
-        raise HTTPException(404)
+@app.get("/api/notebooks/{key}")
+def notebook_detail(key: str, session: Session = Depends(db_dep)):
+    nb = resolve_notebook(session, key)
     cells = session.query(NotebookCell).filter_by(notebook_id=nb.id).order_by(NotebookCell.cell_index).all()
     artifact = session.get(SourceArtifact, nb.artifact_id)
+    filename = artifact.filename if artifact else (nb.slug if nb.slug.endswith(".ipynb") else f"{nb.slug}.ipynb")
     flow = [c.heading for c in cells if c.heading]
     uniq_flow = []
     for h in flow:
         if h not in uniq_flow:
             uniq_flow.append(h)
     return {
+        "id": nb.uid or nb.slug,
         "slug": nb.slug,
-        "filename": artifact.filename if artifact else slug,
+        "filename": filename,
         "purpose": nb.purpose,
         "why_it_matters": nb.why_it_matters,
         "expected_outcome": nb.expected_outcome,
         "flow": uniq_flow,
+        "disclaimer": "Not affiliated with or endorsed by NVIDIA. Notebook code is DATA — parsed and displayed, never executed.",
         "execution_policy": "Notebook code is educational content. The academy never auto-executes shell, kubectl, helm, docker, or Python from cells.",
         "cells": [
             {
@@ -331,13 +345,19 @@ def notebook_detail(slug: str, session: Session = Depends(db_dep)):
                 "dangerous": c.dangerous,
                 "commands": c.commands,
                 "extras": c.extras,
-                "locator": {"source_type": "notebook", "file": artifact.filename if artifact else slug, "cell_index": c.cell_index},
+                "never_execute": bool(c.dangerous),
+                "locator": {"source_type": "notebook", "file": filename, "cell_index": c.cell_index},
                 "tabs": {
+                    "plain": _plain_english(c),
                     "plain_english": _plain_english(c),
                     "line_by_line": (c.code or c.markdown).splitlines()[:80],
                     "why": CELL_TEACHING["why"],
+                    "business": CELL_TEACHING["business"],
+                    "should": "See markdown near this cell; stored outputs are absent in this clone unless present in the ipynb.",
                     "what_should_happen": "See markdown near this cell; stored outputs are absent in this clone unless present in the ipynb.",
+                    "verify": CELL_TEACHING["verify"],
                     "how_to_verify": CELL_TEACHING["verify"],
+                    "failure": CELL_TEACHING["failure"],
                     "common_failure": CELL_TEACHING["failure"],
                     "try_modifying": CELL_TEACHING["modify"],
                 },
@@ -345,6 +365,15 @@ def notebook_detail(slug: str, session: Session = Depends(db_dep)):
             for c in cells
         ],
     }
+
+
+@app.get("/api/notebooks/{key}/walkthrough")
+def notebook_walkthrough(key: str, depth: str = "simple", session: Session = Depends(db_dep)):
+    nb = resolve_notebook(session, key)
+    n_cells = session.query(NotebookCell).filter_by(notebook_id=nb.id).count()
+    artifact = session.get(SourceArtifact, nb.artifact_id)
+    filename = artifact.filename if artifact else f"{nb.slug}.ipynb"
+    return build_walkthrough(filename, n_cells, depth)
 
 
 def _plain_english(cell: NotebookCell) -> str:
@@ -362,18 +391,48 @@ def _plain_english(cell: NotebookCell) -> str:
 def sources(session: Session = Depends(db_dep)):
     arts = session.query(SourceArtifact).all()
     return [
-        {"id": a.id, "type": a.source_type, "file": a.filename, "title": a.title, "extra": a.extra}
+        {"id": a.uid or str(a.id), "numeric_id": a.id, "type": a.source_type, "file": a.filename, "title": a.title, "extra": a.extra}
         for a in arts
     ]
 
 
-@app.get("/api/sources/{artifact_id}")
-def source_detail(artifact_id: int, session: Session = Depends(db_dep)):
-    spans = session.query(SourceSpan).filter_by(artifact_id=artifact_id).all()
-    return [
-        {"id": s.id, "title": s.title, "locator": s.locator, "text": (s.text or s.code)[:2000], "heading": s.heading}
-        for s in spans
-    ]
+@app.get("/api/sources/{key}")
+def source_detail(key: str, session: Session = Depends(db_dep)):
+    art = resolve_source(session, key)
+    spans = session.query(SourceSpan).filter_by(artifact_id=art.id).all()
+    return {
+        "id": art.uid or str(art.id),
+        "type": art.source_type,
+        "file": art.filename,
+        "title": art.title,
+        "extra": art.extra,
+        "spans": [
+            {
+                "id": s.uid or str(s.id),
+                "title": s.title,
+                "locator": s.locator,
+                "text": (s.text or s.code)[:2000],
+                "heading": s.heading,
+            }
+            for s in spans
+        ],
+    }
+
+
+@app.get("/api/spans/{key}")
+def span_detail(key: str, session: Session = Depends(db_dep)):
+    span = resolve_span(session, key)
+    art = session.get(SourceArtifact, span.artifact_id)
+    return {
+        "id": span.uid or str(span.id),
+        "artifact_id": art.uid if art else None,
+        "file": art.filename if art else None,
+        "title": span.title,
+        "locator": span.locator,
+        "heading": span.heading,
+        "text": (span.text or span.code)[:8000],
+        "evidence_type": "COURSE_SOURCE",
+    }
 
 
 @app.get("/api/search")
@@ -430,7 +489,34 @@ def api_teachback(body: TeachIn, session: Session = Depends(db_dep)):
 @app.get("/api/twins")
 def twins(session: Session = Depends(db_dep)):
     rows = session.query(DigitalTwin).all()
-    return [{"slug": t.slug, "title": t.title, "summary": t.summary, "controls": t.controls} for t in rows]
+    return [
+        {
+            "slug": t.slug,
+            "id": t.slug,
+            "title": t.title,
+            "summary": t.summary,
+            "controls": t.controls,
+            "suggestions": SUGGESTED_SCENARIOS.get(t.slug, []),
+        }
+        for t in rows
+    ]
+
+
+@app.get("/api/twins/{slug}")
+def twin_detail(slug: str, session: Session = Depends(db_dep)):
+    t = session.query(DigitalTwin).filter_by(slug=slug).one_or_none()
+    if not t or slug not in SCENARIOS:
+        raise HTTPException(404, "Unknown twin")
+    return {
+        "slug": t.slug,
+        "id": t.slug,
+        "title": t.title,
+        "summary": t.summary,
+        "controls": t.controls,
+        "suggestions": SUGGESTED_SCENARIOS.get(t.slug, []),
+        "predict_prompt": "Write what you expect the key metric to do before the twin runs. Outcomes are SIMULATED_RESULT.",
+        "withholds_truth": slug == "incident-diagnosis",
+    }
 
 
 @app.post("/api/twins/{slug}/run")
@@ -592,6 +678,12 @@ def diagnostic(session: Session = Depends(db_dep)):
         if q:
             items.append(_public_question(q))
     return {"items": items, "note": "Adaptive: later items get harder if you are succeeding."}
+
+
+@app.get("/api/lessons")
+def lessons(session: Session = Depends(db_dep)):
+    rows = session.query(Lesson).all()
+    return [{"slug": r.slug, "title": r.title, "concept_slug": r.concept_slug, "twin_id": r.twin_id} for r in rows]
 
 
 @app.get("/api/lessons/{slug}")
@@ -796,3 +888,210 @@ def _group(traces):
         row["input_tokens"] += t.input_tokens
         row["output_tokens"] += t.output_tokens
     return out
+
+
+class PredictionIn(BaseModel):
+    prompt: str = "pre-run prediction"
+    prediction: str
+    actual: dict[str, Any] = Field(default_factory=dict)
+
+
+class VoiceTtsIn(BaseModel):
+    text: str
+    provider: str = "auto"
+    language: str = "en"
+    clip: bool = False
+
+
+class TutorSessionIn(BaseModel):
+    mode: str = "course"
+    depth: str = "engineer"
+    provider: str = "auto"
+
+
+class TutorMessageIn(BaseModel):
+    message: str
+    mode: str | None = None
+    depth: str | None = None
+    provider: str | None = None
+
+
+@app.get("/api/twins/{slug}/suggestions")
+def twin_suggestions(slug: str):
+    if slug not in SCENARIOS:
+        raise HTTPException(404, "Unknown twin")
+    return SUGGESTED_SCENARIOS.get(slug, [])
+
+
+@app.post("/api/twins/{slug}/predictions")
+def twin_predict(slug: str, body: PredictionIn, session: Session = Depends(db_dep)):
+    if slug not in SCENARIOS:
+        raise HTTPException(404, "Unknown twin")
+    user = learner(session)
+    row = LearnerPrediction(
+        user_id=user.id,
+        twin_id=slug,
+        prompt=body.prompt,
+        prediction=body.prediction,
+        actual=body.actual,
+        evidence_type="SIMULATED_RESULT",
+    )
+    session.add(row)
+    session.commit()
+    return {"id": row.id, "twin": slug, "prediction": body.prediction, "evidence_type": "SIMULATED_RESULT"}
+
+
+@app.get("/api/twins/{slug}/predictions")
+def twin_predictions(slug: str, session: Session = Depends(db_dep)):
+    user = learner(session)
+    rows = session.query(LearnerPrediction).filter_by(user_id=user.id, twin_id=slug).all()
+    return [
+        {"id": r.id, "prompt": r.prompt, "prediction": r.prediction, "actual": r.actual, "evidence_type": r.evidence_type}
+        for r in rows
+    ]
+
+
+@app.get("/api/risks")
+def risks():
+    return RISKS
+
+
+@app.get("/api/setup")
+def setup_checklist(session: Session = Depends(db_dep)):
+    n_nb = session.query(Notebook).count()
+    n_q = session.query(Question).count()
+    n_c = session.query(Concept).count()
+    items = [
+        {"id": "demo", "label": "Offline demo tutor (zero-key)", "ok": True, "required": True},
+        {"id": "materials", "label": "course-materials ingested", "ok": n_nb >= 8, "required": True, "count": n_nb},
+        {"id": "concepts", "label": "Concept graph seeded", "ok": n_c >= 80, "count": n_c},
+        {"id": "questions", "label": "Question bank", "ok": n_q >= 400, "count": n_q},
+        {"id": "openai", "label": "OpenAI tutor", "ok": bool(settings.openai_api_key), "required": False},
+        {"id": "nim", "label": "NVIDIA NIM tutor", "ok": bool(settings.nvidia_api_key or settings.nim_base_url), "required": False},
+        {"id": "huggingface", "label": "Hugging Face tutor", "ok": bool(settings.hf_token), "required": False},
+        {"id": "elevenlabs", "label": "ElevenLabs TTS", "ok": bool(settings.elevenlabs_api_key), "required": False},
+        {"id": "sarvam", "label": "Sarvam Indic TTS", "ok": bool(settings.sarvam_api_key), "required": False},
+        {"id": "perplexity", "label": "Perplexity research", "ok": bool(settings.perplexity_api_key), "required": False},
+    ]
+    return {
+        "items": items,
+        "go_live": all(i["ok"] for i in items if i.get("required")),
+        "note": "Keys only enhance. The core academy works with Demo and browser voice.",
+        "disclaimer": "Not affiliated with or endorsed by NVIDIA.",
+    }
+
+
+@app.get("/api/voice/status")
+def api_voice_status():
+    return voice_status()
+
+
+@app.post("/api/voice/tts")
+def api_voice_tts(body: VoiceTtsIn):
+    return tts_payload(body.text, provider=body.provider, language=body.language, clip=body.clip)
+
+
+@app.post("/api/voice/stt")
+async def api_voice_stt(text: str = Form(""), file: UploadFile | None = File(None)):
+    if text.strip():
+        return {"text": text.strip(), "provider": "passthrough", "evidence_type": "TUTOR_INTERPRETATION"}
+    if file:
+        return {
+            "text": "",
+            "provider": "browser_fallback",
+            "filename": file.filename,
+            "note": "Server STT needs a provider key. Use the browser SpeechRecognition fallback.",
+        }
+    return {"text": "", "provider": "browser_fallback"}
+
+
+@app.get("/api/learning/reviews/due")
+def reviews_due(session: Session = Depends(db_dep)):
+    user = learner(session)
+    now = datetime.now(timezone.utc)
+    rows = session.query(ReviewItem).filter(ReviewItem.user_id == user.id).all()
+    due = []
+    for item in rows:
+        due_at = item.due
+        if due_at is not None and due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=timezone.utc)
+        if due_at is None or due_at <= now:
+            due.append(
+                {
+                    "id": item.id,
+                    "concept": item.concept_slug,
+                    "due": item.due.isoformat() if item.due else None,
+                    "reason": item.reason,
+                    "question_id": item.question_id,
+                }
+            )
+    return {"due": due, "count": len(due)}
+
+
+@app.get("/api/learning/mastery")
+def learning_mastery(session: Session = Depends(db_dep)):
+    return progress(session)
+
+
+@app.get("/api/learning/diagnostics")
+def learning_diagnostics(session: Session = Depends(db_dep)):
+    return diagnostic(session)
+
+
+@app.post("/api/tutor/sessions")
+def tutor_session_create(body: TutorSessionIn, session: Session = Depends(db_dep)):
+    user = learner(session)
+    provider = body.provider if body.provider and body.provider != "auto" else "demo"
+    ts = TutorSession(user_id=user.id, mode=body.mode, depth=body.depth, provider=provider)
+    session.add(ts)
+    session.commit()
+    return {"id": ts.id, "mode": ts.mode, "depth": ts.depth, "provider": ts.provider}
+
+
+@app.post("/api/tutor/sessions/{sid}/messages")
+def tutor_session_message(sid: int, body: TutorMessageIn, session: Session = Depends(db_dep)):
+    user = learner(session)
+    ts = session.get(TutorSession, sid)
+    if not ts:
+        raise HTTPException(404, "Unknown tutor session")
+    ps = session.query(ProviderSetting).filter_by(user_id=user.id).one_or_none()
+    provider = body.provider or ts.provider or (ps.tutor_provider if ps else "demo")
+    if provider == "auto":
+        provider = ps.tutor_provider if ps else "demo"
+    mode = body.mode or ts.mode
+    depth = body.depth or ts.depth
+    result = tutor_turn(
+        session,
+        user.id,
+        body.message,
+        mode=mode,
+        depth=depth,
+        provider_name=provider,
+        tutor_session_id=sid,
+    )
+    session.add(
+        ProviderTrace(
+            provider=result["telemetry"]["provider"],
+            model=result["telemetry"].get("model") or "",
+            feature="tutor",
+            input_tokens=result["telemetry"].get("input_tokens") or 0,
+            output_tokens=result["telemetry"].get("output_tokens") or 0,
+            latency_ms=result["telemetry"].get("latency_ms") or 0,
+            ttft_ms=result["telemetry"].get("ttft_ms"),
+            tpot_ms=result["telemetry"].get("tpot_ms"),
+        )
+    )
+    session.commit()
+
+    def events():
+        text = result.get("text") or ""
+        for i in range(0, max(len(text), 1), 48):
+            chunk = text[i : i + 48]
+            yield f"data: {json.dumps({'delta': chunk, 'telemetry': result.get('telemetry')})}\n\n"
+        payload = {k: v for k, v in result.items() if k != "text"}
+        payload["done"] = True
+        payload["text"] = text
+        yield f"data: {json.dumps(payload)}\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+

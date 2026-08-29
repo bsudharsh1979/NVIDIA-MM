@@ -6,7 +6,7 @@ import { TwinStudio } from "@/components/TwinStudio";
 
 function Inner({ slug }: { slug: string }) {
   const sp = useSearchParams();
-  return <TwinStudio slug={slug} initialPrediction={sp.get("prediction") || ""} />;
+  return <TwinStudio slug={slug} initialPrediction={sp.get("prediction") || ""} scenario={sp.get("scenario") || ""} />;
 }
 
 export default function TwinPage({ params }: { params: Promise<{ slug: string }> }) {

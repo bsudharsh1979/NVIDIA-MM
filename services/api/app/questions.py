@@ -22,6 +22,7 @@ def build_questions() -> list[dict]:
         questions.extend(_concept_family(concept))
     questions.extend(_code_fill_fixmes())
     questions.extend(_sequence_and_design())
+    questions.extend(_risk_and_depth_bank())
     # Dedup by prompt
     seen = set()
     unique = []
@@ -1086,6 +1087,62 @@ def _sequence_and_design() -> list[dict]:
                 ans,
                 exp,
                 _src(file, cell),
+            )
+        )
+    return items
+
+
+def _risk_and_depth_bank() -> list[dict]:
+    from .risks import RISKS
+
+    items = []
+    for risk in RISKS:
+        items.append(
+            _q(
+                f"risk-{risk['id']}",
+                "mcq",
+                "diagnose",
+                3,
+                "evidence-types",
+                f"What is a leading signal of this operational risk: {risk['title']}?",
+                [
+                    risk["leading_signal"],
+                    "KEDA replica count dropped (not this course)",
+                    "Grove PodGang failed to schedule (not this course)",
+                    "Dynamo KV router miss (not this course)",
+                ],
+                risk["leading_signal"],
+                f"{risk['mitigation']} Drill: {risk['twin']}.",
+                _src("02a_Intermediate_Fusion.ipynb", 2),
+            )
+        )
+    for concept in CONCEPTS:
+        items.append(
+            _q(
+                f"school-{concept['slug']}",
+                "short_answer",
+                "recall",
+                1,
+                concept["slug"],
+                f"Give a school-depth, everyday explanation of {concept['name']}.",
+                [],
+                concept["school"][:280],
+                concept.get("analogy") or concept["school"],
+                concept["source"],
+            )
+        )
+        items.append(
+            _q(
+                f"research-{concept['slug']}",
+                "short_answer",
+                "design",
+                5,
+                concept["slug"],
+                f"Give a research-depth caveat for {concept['name']} as used in this course.",
+                [],
+                concept["research"][:280],
+                "Stay inside the notebooks; do not invent serving-stack facts from another NVIDIA course.",
+                concept["source"],
             )
         )
     return items

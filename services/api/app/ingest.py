@@ -16,6 +16,7 @@ from .db import (
     SourceSpan,
     Session,
 )
+from .ids import artifact_uid, notebook_uid, span_uid
 
 DANGEROUS = re.compile(
     r"\b(kubectl|helm|docker|rm\s+-rf|subprocess|os\.system|requests\.(get|post)|socket\.)\b",
@@ -70,6 +71,9 @@ def ingest_all(session: Session) -> dict:
         elif path.suffix.lower() in {".ppt", ".pptx"}:
             ingest_pptx(session, course.id, path)
             counts["pptx"] += 1
+        elif path.suffix.lower() in {".html", ".htm"}:
+            ingest_html(session, course.id, path)
+            counts["html"] = counts.get("html", 0) + 1
     session.commit()
     return counts
 
@@ -78,7 +82,13 @@ def ingest_notebook(session: Session, course_id: int, path: Path) -> tuple[int, 
     nb = nbformat.read(str(path), as_version=4)
     checksum = _checksum(path)
     existing = session.query(SourceArtifact).filter_by(filename=path.name, source_type="notebook").one_or_none()
+    art_uid = artifact_uid(path.name)
     if existing and existing.checksum == checksum:
+        if not getattr(existing, "uid", ""):
+            existing.uid = art_uid
+        nb_row = session.query(Notebook).filter_by(artifact_id=existing.id).one_or_none()
+        if nb_row and not getattr(nb_row, "uid", ""):
+            nb_row.uid = notebook_uid(path.name)
         return 0, 0
     if existing:
         session.delete(existing)
@@ -91,6 +101,7 @@ def ingest_notebook(session: Session, course_id: int, path: Path) -> tuple[int, 
         title=_notebook_title(nb, path.name),
         checksum=checksum,
         extra={"cell_count": len(nb.cells)},
+        uid=art_uid,
     )
     session.add(artifact)
     session.flush()
@@ -104,6 +115,7 @@ def ingest_notebook(session: Session, course_id: int, path: Path) -> tuple[int, 
         purpose=overview.get("purpose", artifact.title),
         why_it_matters=overview.get("why", ""),
         expected_outcome=overview.get("outcome", ""),
+        uid=notebook_uid(path.name),
     )
     session.add(notebook)
     session.flush()
@@ -144,6 +156,7 @@ def ingest_notebook(session: Session, course_id: int, path: Path) -> tuple[int, 
             stored_output=outputs,
             heading=heading,
             embedding=_hash_embed(f"{path.name} {heading} {src}"[:8000]),
+            uid=span_uid(art_uid, locator, ctype, idx),
         )
         session.add(span)
         session.flush()
@@ -275,7 +288,7 @@ def _notebook_order(name: str) -> int:
         "04b_VSS_GraphRAG.ipynb",
         "05_Assessment.ipynb",
     ]
-    return order.index(name) if name in order else 100 + abs(hash(name)) % 50
+    return order.index(name) if name in order else 100 + int(artifact_uid(name)[:8], 16) % 50
 
 
 def _find_models(src: str) -> list[str]:
@@ -390,9 +403,42 @@ NOTEBOOK_OVERVIEWS = {
 }
 
 
+def ingest_html(session: Session, course_id: int, path: Path) -> None:
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    text = re.sub(r"<script[\s\S]*?</script>", " ", raw, flags=re.I)
+    text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    uid = artifact_uid(path.name)
+    artifact = SourceArtifact(
+        course_id=course_id,
+        source_type="html",
+        filename=path.name,
+        title=path.stem,
+        checksum=_checksum(path),
+        extra={"chars": len(text)},
+        uid=uid,
+    )
+    session.add(artifact)
+    session.flush()
+    locator = {"source_type": "html", "file": path.name, "page": 1}
+    session.add(
+        SourceSpan(
+            artifact_id=artifact.id,
+            span_type="page",
+            locator=locator,
+            title=path.stem,
+            text=text[:20000],
+            embedding=_hash_embed(text[:8000]),
+            uid=span_uid(uid, locator, "page", 1),
+        )
+    )
+
+
 CELL_TEACHING = {
     "why": "This cell exists to make a course idea executable or to record a result the learner should predict first.",
     "verify": "Read stored outputs if present. Do not assume a blank output means the command succeeded.",
     "failure": "GPU OOM, missing data/ paths, and network calls to via-server/ngc-client will fail outside the DLI classroom.",
     "modify": "Change a hyperparameter or prompt on paper first, then predict the qualitative effect before any real run.",
+    "business": "Operational cost, safety Q&A, or exam pass/fail depends on getting this cell's idea right — not on decorating the notebook.",
 }

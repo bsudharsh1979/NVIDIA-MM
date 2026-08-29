@@ -18,7 +18,8 @@ function SourcesInner() {
       const match = rows.find((a) => !file || a.file === file || String(a.file).includes(file));
       if (match) {
         setActive(match.file);
-        setSpans(await api(`/api/sources/${match.id}`));
+        const detail = await api<any>(`/api/sources/${match.id}`);
+        setSpans(Array.isArray(detail) ? detail : detail.spans || []);
       }
     });
   }, [file]);
@@ -51,7 +52,8 @@ function SourcesInner() {
             className={`card text-left ${active === a.file ? "border-nv-green" : ""}`}
             onClick={async () => {
               setActive(a.file);
-              setSpans(await api(`/api/sources/${a.id}`));
+              const detail = await api<any>(`/api/sources/${a.id}`);
+              setSpans(Array.isArray(detail) ? detail : detail.spans || []);
             }}
           >
             <div className="text-xs uppercase text-nv-green">{a.type}</div>
