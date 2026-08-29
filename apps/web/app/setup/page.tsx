@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 type Item = { id: string; label: string; ok: boolean; required?: boolean; count?: number };
 
 export default function SetupPage() {
-  const [data, setData] = useState<{ items: Item[]; go_live: boolean; note: string; disclaimer: string } | null>(null);
-  useEffect(() => {
-    api("/api/setup").then(setData);
-  }, []);
-  if (!data) return <p>Loading go-live checklist…</p>;
+  const { data, error, loading, retry } = useApi<{ items: Item[]; go_live: boolean; note: string; disclaimer: string }>("/api/setup");
+  if (loading) return <LoadingCard label="Loading go-live checklist" />;
+  if (error) return <ErrorCard error={error} retry={retry} title="Could not load the checklist" />;
+  if (!data) return null;
   return (
     <div className="space-y-4">
       <h1 className="text-3xl font-semibold">Go-live checklist</h1>

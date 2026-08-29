@@ -24,11 +24,13 @@ function TutorInner() {
   const speaking = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
-    api<{ selected: { tutor_provider: string; depth: string; course_mode: string } }>("/api/providers").then((d) => {
-      setProvider(d.selected.tutor_provider);
-      setDepth(d.selected.depth);
-      setMode(d.selected.course_mode);
-    });
+    api<{ selected: { tutor_provider: string; depth: string; course_mode: string } }>("/api/providers")
+      .then((d) => {
+        setProvider(d.selected.tutor_provider);
+        setDepth(d.selected.depth);
+        setMode(d.selected.course_mode);
+      })
+      .catch(() => {});
   }, []);
 
   function interruptVoice() {

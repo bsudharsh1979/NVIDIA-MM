@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 type Risk = {
   id: string;
@@ -17,18 +17,17 @@ type Risk = {
 };
 
 export default function RisksPage() {
-  const [rows, setRows] = useState<Risk[]>([]);
-  useEffect(() => {
-    api<Risk[]>("/api/risks").then(setRows);
-  }, []);
+  const { data: rows, error, loading, retry } = useApi<Risk[]>("/api/risks");
   return (
     <div className="space-y-4">
       <h1 className="text-3xl font-semibold">Risk radar</h1>
       <p className="text-sm text-[var(--muted)]">
         Curated technical, security, and business risks from this multimodal course. Each row deep-links into a twin drill.
       </p>
+      {loading && <LoadingCard label="Loading risks" />}
+      {error && <ErrorCard error={error} retry={retry} title="Could not load risks" />}
       <div className="grid gap-3">
-        {rows.map((r) => (
+        {(rows || []).map((r) => (
           <article key={r.id} className="card space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-semibold">{r.title}</h2>

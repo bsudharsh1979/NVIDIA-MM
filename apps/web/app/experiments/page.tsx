@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, friendlyError } from "@/lib/api";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
 
 export default function ExperimentsPage() {
@@ -11,16 +11,23 @@ export default function ExperimentsPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [imported, setImported] = useState<any>(null);
   const [cmp, setCmp] = useState<any>(null);
+  const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    api<any[]>("/api/experiments").then(setRows);
+    api<any[]>("/api/experiments")
+      .then(setRows)
+      .catch((e) => setErr(friendlyError(e)));
   }, [imported]);
   async function upload() {
-    const fd = new FormData();
-    fd.set("kind", kind);
-    fd.set("name", name);
-    fd.set("raw_text", raw);
-    const res = await fetch("/api/experiments/import", { method: "POST", body: fd });
-    setImported(await res.json());
+    try {
+      setErr(null);
+      const fd = new FormData();
+      fd.set("kind", kind);
+      fd.set("name", name);
+      fd.set("raw_text", raw);
+      setImported(await api("/api/experiments/import", { method: "POST", body: fd }));
+    } catch (e) {
+      setErr(friendlyError(e));
+    }
   }
   return (
     <div className="space-y-4">
@@ -40,6 +47,7 @@ export default function ExperimentsPage() {
         <button className="btn" onClick={upload}>
           Import as ACTUAL_RUN
         </button>
+        {err && <p className="text-sm text-amber-300">{err}</p>}
       </div>
       {imported && (
         <div className="card text-sm">
@@ -51,17 +59,22 @@ export default function ExperimentsPage() {
         <h2 className="font-semibold">Compare two synthetic ACTUAL_RUN payloads</h2>
         <button
           className="btn mt-3"
-          onClick={async () =>
-            setCmp(
-              await api("/api/experiments/compare", {
-                method: "POST",
-                body: JSON.stringify({
-                  a: { metadata: { architecture: "concat", dataset: "colored_cubes", freeze_lidar_cnn: true, split: "val" }, metrics: { valid_error: 0.24 } },
-                  b: { metadata: { architecture: "lidar", dataset: "mixed_shapes", freeze_lidar_cnn: false, split: "train" }, metrics: { valid_error: 0.12 } },
-                }),
-              })
-            )
-          }
+          onClick={async () => {
+            try {
+              setErr(null);
+              setCmp(
+                await api("/api/experiments/compare", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    a: { metadata: { architecture: "concat", dataset: "colored_cubes", freeze_lidar_cnn: true, split: "val" }, metrics: { valid_error: 0.24 } },
+                    b: { metadata: { architecture: "lidar", dataset: "mixed_shapes", freeze_lidar_cnn: false, split: "train" }, metrics: { valid_error: 0.12 } },
+                  }),
+                })
+              );
+            } catch (e) {
+              setErr(friendlyError(e));
+            }
+          }}
         >
           Detect confounders
         </button>

@@ -1,17 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 export default function ProgressPage() {
-  const [data, setData] = useState<any>(null);
-  const [integrity, setIntegrity] = useState<any>(null);
-  useEffect(() => {
-    api("/api/progress").then(setData);
-    api("/api/integrity").then(setIntegrity);
-  }, []);
-  if (!data) return <p>Loading progress…</p>;
+  const { data, error, loading, retry } = useApi<any>("/api/progress");
+  const { data: integrity } = useApi<any>("/api/integrity");
+  if (loading) return <LoadingCard label="Loading progress" />;
+  if (error) return <ErrorCard error={error} retry={retry} title="Could not load progress" />;
+  if (!data) return null;
   return (
     <div className="space-y-4">
       <h1 className="text-3xl font-semibold">Progress & integrity</h1>

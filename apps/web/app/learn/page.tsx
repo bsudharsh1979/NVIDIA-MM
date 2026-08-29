@@ -1,15 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 export default function LearnIndex() {
-  const [nodes, setNodes] = useState<{ slug: string; name: string; cluster: string }[]>([]);
-  useEffect(() => {
-    api<{ nodes: typeof nodes }>("/api/concepts").then((d) => setNodes(d.nodes));
-  }, []);
+  const { data, error, loading, retry } = useApi<{ nodes: { slug: string; name: string; cluster: string }[] }>("/api/concepts");
+  const nodes = data?.nodes || [];
   const clusters = Array.from(new Set(nodes.map((n) => n.cluster)));
   return (
     <div className="space-y-6">
@@ -20,6 +18,8 @@ export default function LearnIndex() {
       <Link className="btn" href="/diagnostic">
         First-run diagnostic
       </Link>
+      {loading && <LoadingCard label="Loading concepts" />}
+      {error && <ErrorCard error={error} retry={retry} title="Could not load concepts" />}
       {clusters.map((c) => (
         <section key={c} className="card">
           <h2 className="font-semibold capitalize">{c}</h2>

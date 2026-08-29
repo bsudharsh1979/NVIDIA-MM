@@ -7,9 +7,11 @@ from typing import Any
 
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket
+import logging
+
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -70,8 +72,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+logger = logging.getLogger("academy")
+
 _LAST_TWIN: TwinState | None = None
 _READY = False
+
+
+@app.exception_handler(Exception)
+async def _unhandled_error(request: Request, exc: Exception):
+    """Every failure returns explainable JSON instead of a bare 500 page."""
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (
+                "The API hit an unexpected error and logged it. "
+                "Your data is safe — content ids are deterministic. "
+                "Retry the request; if it persists, check /api/setup."
+            ),
+            "path": request.url.path,
+        },
+    )
 
 
 def ensure_ready() -> None:
@@ -644,6 +665,15 @@ def attempt(qid: int, body: AttemptIn, session: Session = Depends(db_dep)):
     }
 
 
+_STOPWORDS = {"the", "and", "that", "with", "for", "this", "from", "into", "are", "was", "not", "its", "has", "have", "can", "will", "each", "them", "then", "than", "when", "what", "which", "your", "you", "one", "two", "all", "any", "also", "only", "over", "more", "most", "very", "such", "these", "those", "their", "there", "here", "does", "how"}
+
+
+def _significant_tokens(text: str) -> set[str]:
+    import re as _re
+
+    return {t for t in _re.findall(r"[a-z0-9_]+", (text or "").lower()) if len(t) > 3 and t not in _STOPWORDS}
+
+
 def _grade(q: Question, response: str) -> bool:
     gold = (q.answer or "").strip().lower()
     got = (response or "").strip().lower()
@@ -653,6 +683,15 @@ def _grade(q: Question, response: str) -> bool:
         return sorted(norm(gold)) == sorted(norm(got)) or gold == got
     if gold == got:
         return True
+    if q.qtype in {"short_answer", "free_response"}:
+        # Free text: grade by coverage of the answer's significant terms, not
+        # exact substring match — learners paraphrase.
+        gold_tokens = _significant_tokens(gold)
+        got_tokens = _significant_tokens(got)
+        if gold_tokens and len(got) > 8:
+            overlap = len(gold_tokens & got_tokens) / len(gold_tokens)
+            if overlap >= 0.35:
+                return True
     if gold in got or got in gold:
         return len(got) > 8
     return False

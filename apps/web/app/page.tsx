@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, friendlyError } from "@/lib/api";
 import { ApiPicker } from "@/components/ApiPicker";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 type Dash = {
   overall_mastery: number;
@@ -28,20 +29,15 @@ type Dash = {
 export default function HomePage() {
   const [data, setData] = useState<Dash | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
+    setErr(null);
     api<Dash>("/api/dashboard")
       .then(setData)
-      .catch((e) => setErr(String(e)));
-  }, []);
-  if (err) {
-    return (
-      <div className="card">
-        <h1 className="text-xl font-semibold">API offline</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">Start the FastAPI service, then refresh. {err}</p>
-      </div>
-    );
-  }
-  if (!data) return <p>Loading dashboard…</p>;
+      .catch((e) => setErr(friendlyError(e)));
+  }, [tick]);
+  if (err) return <ErrorCard error={err} retry={() => setTick((t) => t + 1)} title="The learning API is unreachable" />;
+  if (!data) return <LoadingCard label="Loading your dashboard" />;
   return (
     <div className="space-y-6">
       <header>

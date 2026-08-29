@@ -1,20 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, friendlyError } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 export default function DiagnosticPage() {
-  const [items, setItems] = useState<any[]>([]);
+  const { data, error, loading, retry } = useApi<{ items: any[] }>("/api/diagnostic");
+  const items = data?.items || [];
   const [i, setI] = useState(0);
   const [choice, setChoice] = useState("");
   const [done, setDone] = useState(false);
+  const [submitErr, setSubmitErr] = useState<string | null>(null);
   const router = useRouter();
-  useEffect(() => {
-    api<{ items: any[] }>("/api/diagnostic").then((d) => setItems(d.items));
-  }, []);
   const q = items[i];
+  if (loading) return <LoadingCard label="Loading diagnostic" />;
+  if (error) return <ErrorCard error={error} retry={retry} title="Could not load the diagnostic" />;
   if (done) {
     return (
       <div className="card space-y-3">
@@ -26,7 +29,7 @@ export default function DiagnosticPage() {
       </div>
     );
   }
-  if (!q) return <p>Loading diagnostic…</p>;
+  if (!q) return <p className="card">No diagnostic items available yet.</p>;
   return (
     <div className="space-y-4">
       <h1 className="text-3xl font-semibold">Adaptive diagnostic</h1>
@@ -43,14 +46,20 @@ export default function DiagnosticPage() {
             </label>
           ))}
         </div>
+        {submitErr && <p className="mt-3 text-sm text-amber-300">{submitErr}</p>}
         <button
           className="btn mt-4"
           disabled={!choice}
           onClick={async () => {
-            await api(`/api/questions/${q.id}/attempt`, { method: "POST", body: JSON.stringify({ response: choice }) });
-            setChoice("");
-            if (i + 1 >= items.length) setDone(true);
-            else setI(i + 1);
+            try {
+              setSubmitErr(null);
+              await api(`/api/questions/${q.id}/attempt`, { method: "POST", body: JSON.stringify({ response: choice }) });
+              setChoice("");
+              if (i + 1 >= items.length) setDone(true);
+              else setI(i + 1);
+            } catch (e) {
+              setSubmitErr(friendlyError(e));
+            }
           }}
         >
           Continue

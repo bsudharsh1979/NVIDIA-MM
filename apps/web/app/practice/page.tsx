@@ -3,26 +3,27 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 function PracticeInner() {
   const sp = useSearchParams();
   const concept = sp.get("concept") || "";
-  const [items, setItems] = useState<any[]>([]);
+  const { data: items, error, loading, retry } = useApi<any[]>(concept ? `/api/questions?concept=${concept}` : "/api/questions");
   const [idx, setIdx] = useState(0);
   const [choice, setChoice] = useState("");
   const [result, setResult] = useState<any>(null);
   const [hints, setHints] = useState(0);
   const [hintText, setHintText] = useState("");
   useEffect(() => {
-    const q = concept ? `/api/questions?concept=${concept}` : "/api/questions";
-    api<any[]>(q).then((rows) => {
-      setItems(rows);
-      setIdx(0);
-      setResult(null);
-    });
+    setIdx(0);
+    setResult(null);
+    setChoice("");
   }, [concept]);
-  const q = items[idx];
+  const q = (items || [])[idx];
+  if (loading) return <LoadingCard label="Loading practice items" />;
+  if (error) return <ErrorCard error={error} retry={retry} title="Could not load practice" />;
   async function submit() {
     if (!q) return;
     try {
@@ -35,12 +36,12 @@ function PracticeInner() {
       setResult({ correct: false, socratic: String(e), why_wrong: { your_answer: choice, what_this_suggests: "The grader failed.", missing_distinction: "Try again.", source_evidence: q.source, simple_correction: "Retry this item." } });
     }
   }
-  if (!q) return <p>No questions yet.</p>;
+  if (!q) return <p className="card">No questions for this concept yet — try another from the concept map.</p>;
   return (
     <div className="space-y-4">
       <h1 className="text-3xl font-semibold">Practice</h1>
       <p className="text-sm text-[var(--muted)]">
-        {idx + 1}/{items.length} · {q.bloom} · {q.concept_slug} <EvidenceBadge type="COURSE_SOURCE" />
+        {idx + 1}/{(items || []).length} · {q.bloom} · {q.concept_slug} <EvidenceBadge type="COURSE_SOURCE" />
       </p>
       <div className="card">
         <p className="font-medium">{q.prompt}</p>
@@ -96,7 +97,7 @@ function PracticeInner() {
             <button
               className="btn-ghost"
               onClick={() => {
-                setIdx((i) => Math.min(items.length - 1, i + 1));
+                setIdx((i) => Math.min((items || []).length - 1, i + 1));
                 setChoice("");
                 setResult(null);
                 setHints(0);

@@ -3,8 +3,12 @@ import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Modality Twin Academy",
-  description: "Personalized technical learning for NVIDIA multimodal AI — fusion, contrastive pre-training, VSS, Graph-RAG, CILP. Not affiliated with or endorsed by NVIDIA.",
+  title: {
+    default: "Modality Twin Academy",
+    template: "%s · Modality Twin Academy",
+  },
+  description:
+    "Digital-twin learning platform for the NVIDIA DLI course Building Multimodal AI Applications — fusion, contrastive pre-training, VSS, Graph-RAG, CILP. Every number carries an evidence label. Not affiliated with or endorsed by NVIDIA.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -181,6 +181,22 @@ class NvidiaNIMProvider(TutorModelProvider):
         )
 
 
+def _strip_nim_thinking(text: str) -> str:
+    raw = (text or "").strip()
+    if "here's a thinking process" not in raw.lower():
+        return raw
+    blocks = [b.strip() for b in raw.split("\n\n") if b.strip()]
+    answers = [
+        b
+        for b in blocks
+        if not b.lower().startswith("here's a thinking")
+        and not b[:3].rstrip(".").isdigit()
+        and "analyze user input" not in b.lower()
+        and len(b) > 40
+    ]
+    return answers[-1] if answers else raw
+
+
 class HuggingFaceProvider(TutorModelProvider):
     name = "huggingface"
 

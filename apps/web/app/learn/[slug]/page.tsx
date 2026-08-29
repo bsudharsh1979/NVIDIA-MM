@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, friendlyError } from "@/lib/api";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 import { NotesPanel } from "@/components/NotesPanel";
 
 export default function LessonPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -14,15 +15,16 @@ export default function LessonPage({ params }: { params: Promise<{ slug: string 
   const [depth, setDepth] = useState<"school" | "engineer" | "research">("engineer");
   const [pred, setPred] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     setErr(null);
     api(`/api/concepts/${slug}`)
       .then(setConcept)
-      .catch((e) => setErr(String(e)));
+      .catch((e) => setErr(friendlyError(e)));
     api(`/api/lessons/${slug}`).then(setLesson).catch(() => {});
-  }, [slug]);
-  if (err) return <p className="text-amber-300">Could not load this lesson. {err}</p>;
-  if (!concept) return <p>Loading lesson…</p>;
+  }, [slug, tick]);
+  if (err) return <ErrorCard error={err} retry={() => setTick((t) => t + 1)} title="Could not load this lesson" />;
+  if (!concept) return <LoadingCard label="Loading lesson" />;
   const steps = lesson?.steps || [];
   const current = steps[step];
   const body = concept[depth];

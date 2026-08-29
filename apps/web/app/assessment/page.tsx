@@ -1,20 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, friendlyError } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 export default function AssessmentPage() {
-  const [spec, setSpec] = useState<any>(null);
+  const { data: spec, error, loading, retry } = useApi<any>("/api/assessment");
   const [architecture, setArchitecture] = useState("cilp_plus_projector_frozen_head");
   const [recipe, setRecipe] = useState("freeze_lidar_and_cilp_train_projector");
   const [defense, setDefense] = useState("");
   const [grade, setGrade] = useState<any>(null);
-  useEffect(() => {
-    api("/api/assessment").then(setSpec);
-  }, []);
-  if (!spec) return <p>Loading assessment…</p>;
+  const [gradeErr, setGradeErr] = useState<string | null>(null);
+  if (loading) return <LoadingCard label="Loading the assessment arena" />;
+  if (error) return <ErrorCard error={error} retry={retry} title="Could not load the assessment" />;
+  if (!spec) return null;
   return (
     <div className="space-y-4">
       <h1 className="text-3xl font-semibold">{spec.title}</h1>
@@ -55,10 +57,18 @@ export default function AssessmentPage() {
         <textarea className="w-full rounded-lg border border-[var(--line)] bg-transparent p-2" rows={4} placeholder="Defend your recommendation…" value={defense} onChange={(e) => setDefense(e.target.value)} />
         <button
           className="btn"
-          onClick={async () => setGrade(await api("/api/assessment/grade", { method: "POST", body: JSON.stringify({ architecture, recipe, defense }) }))}
+          onClick={async () => {
+            try {
+              setGradeErr(null);
+              setGrade(await api("/api/assessment/grade", { method: "POST", body: JSON.stringify({ architecture, recipe, defense }) }));
+            } catch (e) {
+              setGradeErr(friendlyError(e));
+            }
+          }}
         >
           Grade reasoning
         </button>
+        {gradeErr && <p className="text-sm text-amber-300">{gradeErr}</p>}
         {grade && <pre className="overflow-auto text-xs">{JSON.stringify(grade, null, 2)}</pre>}
       </div>
     </div>

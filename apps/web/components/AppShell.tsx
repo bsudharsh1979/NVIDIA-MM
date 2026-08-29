@@ -7,6 +7,7 @@ import {
   Brain,
   ClipboardCheck,
   FlaskConical,
+  HelpCircle,
   Home,
   Library,
   LineChart,
@@ -37,6 +38,7 @@ const NAV = [
   { href: "/sources", label: "Sources", icon: Library },
   { href: "/setup", label: "Setup", icon: ListChecks },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/about", label: "How it works", icon: HelpCircle },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -103,6 +105,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main id="main" className="mx-auto max-w-6xl px-4 py-8">
           {children}
         </main>
+        <footer className="mx-auto max-w-6xl px-4 pb-8 text-xs text-[var(--muted)]">
+          Not affiliated with or endorsed by NVIDIA. Course files are bring-your-own personal-use materials; simulations are
+          labeled SIMULATED_RESULT and are never measurements. <Link className="text-nv-green" href="/about">How it works</Link>
+        </footer>
       </div>
     </div>
   );

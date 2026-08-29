@@ -14,10 +14,12 @@ export default function SettingsPage() {
   });
   const [msg, setMsg] = useState("");
   useEffect(() => {
-    api<any>("/api/providers").then((d) => {
-      setData(d);
-      setForm({ ...form, ...d.selected });
-    });
+    api<any>("/api/providers")
+      .then((d) => {
+        setData(d);
+        setForm((f) => ({ ...f, ...d.selected }));
+      })
+      .catch((e) => setMsg(`Could not load provider status: ${e}`));
   }, []);
   return (
     <div className="space-y-4">
@@ -55,8 +57,12 @@ export default function SettingsPage() {
         <button
           className="btn"
           onClick={async () => {
-            const r = await api<any>("/api/providers", { method: "PUT", body: JSON.stringify(form) });
-            setMsg(r.warning || "Saved.");
+            try {
+              const r = await api<any>("/api/providers", { method: "PUT", body: JSON.stringify(form) });
+              setMsg(r.warning || "Saved.");
+            } catch (e) {
+              setMsg(`Save failed: ${e}`);
+            }
           }}
         >
           Save provider choice

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, friendlyError } from "@/lib/api";
 
 type Step = {
   kind: string;
@@ -53,6 +53,11 @@ export function WalkthroughPlayer({
   const instant = useRef<number[]>([]);
   const playGen = useRef(0);
   const audioEl = useRef<HTMLAudioElement | null>(null);
+  // Narration audio cache: `${depth}:${index}` -> data URL, or null when TTS
+  // has no server audio (browser speech is used instead). Prevents re-billing
+  // ElevenLabs for replayed or revisited steps.
+  const audioCache = useRef<Map<string, string | null>>(new Map());
+  const [narrating, setNarrating] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(DEPTH_KEY);
@@ -74,7 +79,7 @@ export function WalkthroughPlayer({
         setData(wt);
         return wt;
       } catch (e) {
-        setErr(String(e));
+        setErr(friendlyError(e));
         return null;
       } finally {
         setLoading(false);
@@ -106,17 +111,38 @@ export function WalkthroughPlayer({
     }
   };
 
-  const speak = async (text: string) => {
+  const fetchAudio = useCallback(
+    async (stepIndex: number, text: string): Promise<string | null> => {
+      const key = `${depth}:${stepIndex}`;
+      if (audioCache.current.has(key)) return audioCache.current.get(key) ?? null;
+      try {
+        const payload = await api<any>("/api/voice/tts", {
+          method: "POST",
+          body: JSON.stringify({ text, provider: "auto", clip: false }),
+        });
+        const b64 = payload.audio?.audio_base64;
+        const url = b64 ? `data:${payload.audio.content_type || "audio/mpeg"};base64,${b64}` : null;
+        audioCache.current.set(key, url);
+        return url;
+      } catch {
+        audioCache.current.set(key, null);
+        return null;
+      }
+    },
+    [depth]
+  );
+
+  const speak = async (stepIndex: number, text: string) => {
     const t0 = performance.now();
+    setNarrating(true);
     try {
-      const payload = await api<any>("/api/voice/tts", {
-        method: "POST",
-        body: JSON.stringify({ text, provider: "auto", clip: false }),
-      });
-      const b64 = payload.audio?.audio_base64;
-      if (b64) {
+      const url = await fetchAudio(stepIndex, text);
+      // Warm the next step's narration while this one plays.
+      const next = data?.steps[stepIndex + 1];
+      if (next) void fetchAudio(stepIndex + 1, next.text);
+      if (url) {
         return await new Promise<number>((resolve) => {
-          const audio = new Audio(`data:${payload.audio.content_type || "audio/mpeg"};base64,${b64}`);
+          const audio = new Audio(url);
           audio.playbackRate = Math.min(1.5, Math.max(0.75, speed));
           audioEl.current = audio;
           audio.onended = () => resolve(performance.now() - t0);
@@ -124,20 +150,20 @@ export function WalkthroughPlayer({
           audio.play().catch(() => resolve(performance.now() - t0));
         });
       }
-    } catch {
-      /* browser fallback below */
+      if (!window.speechSynthesis) {
+        return performance.now() - t0;
+      }
+      return await new Promise<number>((resolve) => {
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = Math.min(2, Math.max(0.7, speed * 0.93));
+        u.onend = () => resolve(performance.now() - t0);
+        u.onerror = () => resolve(performance.now() - t0);
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+      });
+    } finally {
+      setNarrating(false);
     }
-    if (!window.speechSynthesis) {
-      return performance.now() - t0;
-    }
-    return new Promise<number>((resolve) => {
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = Math.min(2, Math.max(0.7, speed * 0.93));
-      u.onend = () => resolve(performance.now() - t0);
-      u.onerror = () => resolve(performance.now() - t0);
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    });
   };
 
   const go = useCallback(
@@ -156,7 +182,7 @@ export function WalkthroughPlayer({
       for (let i = index; i < data.steps.length; i++) {
         if (cancelled || playGen.current !== gen) return;
         setIndex(i);
-        const elapsed = await speak(data.steps[i].text);
+        const elapsed = await speak(i, data.steps[i].text);
         if (cancelled || playGen.current !== gen) return;
         if (elapsed < 400) {
           instant.current = [...instant.current.slice(-1), elapsed];
@@ -233,6 +259,7 @@ export function WalkthroughPlayer({
       {loading && <p className="mt-2 text-sm text-[var(--muted)]">Loading lecture…</p>}
       {err && <p className="mt-2 text-sm text-amber-300">{err}</p>}
       {unavailable && <p className="mt-2 text-sm text-amber-200">audio unavailable — step through manually</p>}
+      {narrating && !unavailable && <p className="mt-2 text-xs text-[var(--muted)]">Narrating… fetching high-quality audio the first time each step plays.</p>}
       {step && (
         <div className="mt-3 space-y-2">
           <div className="text-xs uppercase text-[var(--muted)]">

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api } from "@/lib/api";
+import { api, friendlyError } from "@/lib/api";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 export function TwinStudio({ slug, initialPrediction = "", scenario = "" }: { slug: string; initialPrediction?: string; scenario?: string }) {
   const [meta, setMeta] = useState<any>(null);
@@ -13,16 +14,26 @@ export function TwinStudio({ slug, initialPrediction = "", scenario = "" }: { sl
   const [state, setState] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
   useEffect(() => {
-    api<any[]>("/api/twins").then((rows) => {
-      const t = rows.find((r) => r.slug === slug);
-      setMeta(t);
-      const next: Record<string, any> = {};
-      for (const c of t?.controls || []) next[c.key] = c.default;
-      const suggested = (t?.suggestions || []).find((s: any) => s.name === scenario);
-      setControls(suggested ? { ...next, ...suggested.controls } : next);
-    });
-  }, [slug]);
+    setLoadErr(null);
+    api<any[]>("/api/twins")
+      .then((rows) => {
+        const t = rows.find((r) => r.slug === slug);
+        if (!t) {
+          setLoadErr(`No twin named "${slug}". Open Digital Twins for the current list.`);
+          return;
+        }
+        setMeta(t);
+        const next: Record<string, any> = {};
+        for (const c of t?.controls || []) next[c.key] = c.default;
+        const suggested = (t?.suggestions || []).find((s: any) => s.name === scenario);
+        setControls(suggested ? { ...next, ...suggested.controls } : next);
+      })
+      .catch((e) => setLoadErr(friendlyError(e)));
+  }, [slug, scenario]);
 
   async function run() {
     setErr(null);
@@ -30,15 +41,23 @@ export function TwinStudio({ slug, initialPrediction = "", scenario = "" }: { sl
       setErr("Predict first — the twin will not reveal metrics until you write a hypothesis.");
       return;
     }
-    const r = await api<any>(`/api/twins/${slug}/run`, {
-      method: "POST",
-      body: JSON.stringify({ controls, prediction }),
-    });
-    setState(r.state);
-    setRevealed(true);
+    try {
+      setBusy(true);
+      const r = await api<any>(`/api/twins/${slug}/run`, {
+        method: "POST",
+        body: JSON.stringify({ controls, prediction }),
+      });
+      setState(r.state);
+      setRevealed(true);
+    } catch (e) {
+      setErr(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (!meta) return <p>Loading twin…</p>;
+  if (loadErr) return <ErrorCard error={loadErr} title="Could not load this twin" />;
+  if (!meta) return <LoadingCard label="Loading twin" />;
   const series = state?.series?.train_error?.map((v: number, i: number) => ({
     epoch: i + 1,
     train: v,
@@ -106,8 +125,8 @@ export function TwinStudio({ slug, initialPrediction = "", scenario = "" }: { sl
             </div>
           ) : null}
           {err && <p className="text-sm text-amber-300">{err}</p>}
-          <button className="btn" onClick={run}>
-            Run simulation
+          <button className="btn" onClick={run} disabled={busy}>
+            {busy ? "Simulating…" : "Run simulation"}
           </button>
         </div>
         <div className="card">

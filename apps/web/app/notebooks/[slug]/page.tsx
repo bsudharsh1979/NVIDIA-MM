@@ -2,8 +2,9 @@
 
 import { Suspense, use, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, friendlyError } from "@/lib/api";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 import { WalkthroughPlayer } from "@/components/WalkthroughPlayer";
 
 const TABS = ["CODE", "PLAIN ENGLISH", "WHY THIS EXISTS", "BUSINESS IMPACT", "WHAT SHOULD HAPPEN", "HOW TO VERIFY", "COMMON FAILURE", "TRY MODIFYING"];
@@ -12,29 +13,24 @@ function Detail({ slug }: { slug: string }) {
   const walkthrough = useSearchParams().get("walkthrough") === "1";
   const [nb, setNb] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
   const [tab, setTab] = useState("CODE");
   const [open, setOpen] = useState<number | null>(0);
   const [stage, setStage] = useState<{ start: number | null; end: number | null }>({ start: null, end: null });
 
   useEffect(() => {
+    setErr(null);
     api(`/api/notebooks/${slug}`)
       .then(setNb)
-      .catch((e) => setErr(String(e)));
-  }, [slug]);
+      .catch((e) => setErr(friendlyError(e)));
+  }, [slug, tick]);
 
   const onStage = useCallback((start: number | null, end: number | null) => {
     setStage({ start, end });
   }, []);
 
-  if (err) {
-    return (
-      <div className="card">
-        <h1 className="text-xl font-semibold">Notebook unavailable</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">{err}</p>
-      </div>
-    );
-  }
-  if (!nb) return <p>Loading notebook…</p>;
+  if (err) return <ErrorCard error={err} retry={() => setTick((t) => t + 1)} title="Notebook unavailable" />;
+  if (!nb) return <LoadingCard label="Loading notebook" />;
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">

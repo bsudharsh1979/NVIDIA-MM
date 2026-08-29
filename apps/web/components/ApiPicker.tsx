@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, friendlyError } from "@/lib/api";
 
 const ENGINES = [
   { value: "demo", label: "Demo — offline, no key" },
@@ -14,7 +14,9 @@ export function ApiPicker({ compact = false }: { compact?: boolean }) {
   const [tutor, setTutor] = useState("demo");
   const [msg, setMsg] = useState("");
   useEffect(() => {
-    api<{ selected: { tutor_provider: string } }>("/api/providers").then((d) => setTutor(d.selected.tutor_provider));
+    api<{ selected: { tutor_provider: string } }>("/api/providers")
+      .then((d) => setTutor(d.selected.tutor_provider))
+      .catch(() => {});
   }, []);
   return (
     <div className={compact ? "space-y-2" : "card space-y-3"}>
@@ -39,11 +41,15 @@ export function ApiPicker({ compact = false }: { compact?: boolean }) {
         className="btn"
         type="button"
         onClick={async () => {
-          const r = await api<{ warning?: string }>("/api/providers", {
-            method: "PUT",
-            body: JSON.stringify({ tutor_provider: tutor, voice_provider: "off", research_provider: "off", depth: "engineer", course_mode: "course" }),
-          });
-          setMsg(r.warning || `Tutor engine set to ${tutor}.`);
+          try {
+            const r = await api<{ warning?: string }>("/api/providers", {
+              method: "PUT",
+              body: JSON.stringify({ tutor_provider: tutor, voice_provider: "off", research_provider: "off", depth: "engineer", course_mode: "course" }),
+            });
+            setMsg(r.warning || `Tutor engine set to ${tutor}.`);
+          } catch (e) {
+            setMsg(friendlyError(e));
+          }
         }}
       >
         Use this tutor engine

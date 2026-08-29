@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+from collections import OrderedDict
 from typing import Any
 
 import httpx
@@ -10,6 +12,29 @@ import httpx
 from .config import settings
 
 LEGACY_CLIP_CHARS = 520
+
+# Server-side narration cache: identical text never re-bills ElevenLabs.
+# Safe because the Modal API is pinned to one container.
+_TTS_CACHE: "OrderedDict[str, dict]" = OrderedDict()
+_TTS_CACHE_MAX = 300
+
+
+def _cache_key(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+
+def _cache_get(text: str) -> dict | None:
+    key = _cache_key(text)
+    if key in _TTS_CACHE:
+        _TTS_CACHE.move_to_end(key)
+        return _TTS_CACHE[key]
+    return None
+
+
+def _cache_put(text: str, audio: dict) -> None:
+    _TTS_CACHE[_cache_key(text)] = audio
+    while len(_TTS_CACHE) > _TTS_CACHE_MAX:
+        _TTS_CACHE.popitem(last=False)
 
 
 def prepare_spoken_text(text: str, *, clip: bool = False, max_chars: int = LEGACY_CLIP_CHARS) -> str:
@@ -33,7 +58,13 @@ def tts_payload(
     chosen = provider
     if provider in {"auto", "elevenlabs"} and settings.elevenlabs_api_key:
         chosen = "elevenlabs"
-        audio = _elevenlabs(spoken)
+        cached = _cache_get(spoken)
+        if cached is not None:
+            audio = {**cached, "cached": True}
+        else:
+            audio = _elevenlabs(spoken)
+            if audio.get("status") == "ok":
+                _cache_put(spoken, audio)
     elif provider == "sarvam" and settings.sarvam_api_key:
         chosen = "sarvam"
         audio = {"status": "ok", "note": "Sarvam Indic TTS — preserve NVIDIA English terms.", "chars": len(spoken)}

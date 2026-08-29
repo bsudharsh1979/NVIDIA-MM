@@ -22,8 +22,12 @@ export function NotesPanel({ targetType, targetId }: { targetType: string; targe
           className="btn"
           type="button"
           onClick={async () => {
-            await api("/api/notes", { method: "POST", body: JSON.stringify({ target_type: targetType, target_id: targetId, body }) });
-            setMsg("Note saved.");
+            try {
+              await api("/api/notes", { method: "POST", body: JSON.stringify({ target_type: targetType, target_id: targetId, body }) });
+              setMsg("Note saved.");
+            } catch (e) {
+              setMsg(`Could not save the note: ${e}`);
+            }
           }}
         >
           Save note
@@ -32,8 +36,12 @@ export function NotesPanel({ targetType, targetId }: { targetType: string; targe
           className="btn-ghost"
           type="button"
           onClick={async () => {
-            await api("/api/bookmarks", { method: "POST", body: JSON.stringify({ target_type: targetType, target_id: targetId, body: body || targetId }) });
-            setMsg("Bookmarked for Review Later.");
+            try {
+              await api("/api/bookmarks", { method: "POST", body: JSON.stringify({ target_type: targetType, target_id: targetId, body: body || targetId }) });
+              setMsg("Bookmarked for Review Later.");
+            } catch (e) {
+              setMsg(`Could not bookmark: ${e}`);
+            }
           }}
         >
           Bookmark

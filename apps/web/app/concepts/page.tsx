@@ -1,22 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { useMemo, useState } from "react";
+import { useApi } from "@/lib/useApi";
 import { EvidenceBadge } from "@/components/EvidenceBadge";
+import { ErrorCard, LoadingCard } from "@/components/Status";
 
 export default function ConceptsPage() {
-  const [graph, setGraph] = useState<{ nodes: any[]; edges: any[] } | null>(null);
+  const { data: graph, error, loading, retry } = useApi<{ nodes: any[]; edges: any[] }>("/api/concepts");
   const [sel, setSel] = useState<string | null>(null);
-  useEffect(() => {
-    api<any>("/api/concepts").then(setGraph);
-  }, []);
   const selected = graph?.nodes.find((n) => n.slug === sel);
   const clusters = useMemo(() => Array.from(new Set(graph?.nodes.map((n) => n.cluster) || [])), [graph]);
   return (
     <div className="space-y-4">
       <h1 className="text-3xl font-semibold">Concept map</h1>
       <p className="text-sm text-[var(--muted)]">Select a node. Definitions stay source-grounded; twins stay simulations.</p>
+      {loading && <LoadingCard label="Loading the concept graph" />}
+      {error && <ErrorCard error={error} retry={retry} title="Could not load the concept graph" />}
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="card overflow-auto">
           <svg viewBox="0 0 900 640" className="h-[640px] w-full" role="img" aria-label="Concept graph">
@@ -46,6 +46,7 @@ export default function ConceptsPage() {
               <h2 className="text-lg font-semibold">{selected.name}</h2>
               <EvidenceBadge type="COURSE_SOURCE" />
               <p>{selected.school}</p>
+              {selected.analogy && <p className="text-xs italic text-nv-green">Analogy: {selected.analogy}</p>}
               <p className="text-[var(--muted)]">{selected.engineer}</p>
               <p className="text-xs">{selected.research}</p>
               <p className="text-xs">
