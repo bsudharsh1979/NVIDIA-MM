@@ -160,6 +160,7 @@ class NvidiaNIMProvider(TutorModelProvider):
             "messages": messages,
             "temperature": kwargs.get("temperature", 0.2),
             "max_tokens": kwargs.get("max_tokens", 1024),
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         with httpx.Client(timeout=120) as client:
             r = client.post(url, headers=headers, json=body)

@@ -20,9 +20,17 @@ pytest tests/backend -q
 cd apps/web && npx next lint && npm run build
 ```
 
+## Live URLs (profile `gamgn`)
+
+- API: https://gamgn--modality-twin-academy-api-fastapi-app.modal.run
+- Web: https://gamgn--modality-twin-academy-web-web.modal.run
+- Modal apps: https://modal.com/apps/gamgn/main/deployed/modality-twin-academy-api and https://modal.com/apps/gamgn/main/deployed/modality-twin-academy-web
+
+`MODAL_MIN_CONTAINERS=0`. Provider keys live in the Modal secret `academy-env` (not the git repo).
+
 ## Modal
 
-This Cloud Agent workspace did **not** have a Modal token (`modal` CLI: "Token missing"). Run the commands below on a machine where `modal profile` is already logged in.
+Profile `gamgn`. Keep `MODAL_MIN_CONTAINERS=0` unless you want an always-warm demo container.
 
 Keep `MODAL_MIN_CONTAINERS=0` if you want cold-start savings on the $30/month plan. Use `1` only when you need an always-warm container for a live demo.
 
