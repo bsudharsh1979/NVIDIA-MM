@@ -11,9 +11,9 @@ MAX = int(os.environ.get("MODAL_MAX_CONTAINERS", "1"))
 
 image = (
     modal.Image.debian_slim(python_version="3.12")
+    .pip_install_from_requirements("services/api/requirements.txt")
     .add_local_dir("services", remote_path="/root/services")
     .add_local_dir("course-materials", remote_path="/root/course-materials")
-    .pip_install_from_requirements("services/api/requirements.txt")
 )
 
 app = modal.App("modality-twin-academy-api")

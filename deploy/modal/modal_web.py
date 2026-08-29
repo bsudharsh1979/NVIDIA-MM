@@ -23,6 +23,7 @@ image = (
         "apps/web",
         remote_path="/app",
         ignore=["node_modules", ".next", "coverage"],
+        copy=True,
     )
     .run_commands(
         "cd /app && npm ci || npm install",
