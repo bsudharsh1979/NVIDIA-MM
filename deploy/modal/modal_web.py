@@ -8,17 +8,23 @@ import sys
 import modal
 
 API_BASE = os.environ.get("NEXT_PUBLIC_API_BASE", "").rstrip("/")
-if not API_BASE:
+# Deploy-time guard only. Container import must not crash if the value is baked
+# into the image env or the academy-env secret instead.
+_IN_CONTAINER = bool(os.environ.get("MODAL_TASK_ID") or os.environ.get("MODAL_FUNCTION_RUNTIME"))
+if not API_BASE and not _IN_CONTAINER:
     sys.exit(
         "NEXT_PUBLIC_API_BASE is unset. Deploy deploy/modal/modal_app.py first, then rerun:\n"
         "  NEXT_PUBLIC_API_BASE=<api URL> MODAL_MIN_CONTAINERS=0 modal deploy deploy/modal/modal_web.py"
     )
+if not API_BASE:
+    API_BASE = "https://gamgn--modality-twin-academy-api-fastapi-app.modal.run"
 
 MIN = int(os.environ.get("MODAL_MIN_CONTAINERS", "0"))
 MAX = int(os.environ.get("MODAL_MAX_CONTAINERS", "1"))
 
 image = (
     modal.Image.from_registry("node:22-bookworm-slim", add_python="3.12")
+    .env({"NEXT_PUBLIC_API_BASE": API_BASE})
     .add_local_dir(
         "apps/web",
         remote_path="/app",
