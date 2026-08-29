@@ -169,7 +169,7 @@ class NvidiaNIMProvider(TutorModelProvider):
             return ProviderResult(text="", provider="nim", model=settings.nvidia_nim_model, latency_ms=latency, error=r.text[:500])
         data = r.json()
         message = (data.get("choices") or [{}])[0].get("message") or {}
-        text = message.get("content") or message.get("reasoning_content") or ""
+        text = _strip_nim_thinking(message.get("content") or message.get("reasoning_content") or "")
         usage = data.get("usage") or {}
         return ProviderResult(
             text=text,
